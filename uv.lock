@@ -617,6 +617,7 @@ source = { editable = "." }
 dependencies = [
     { name = "azure-identity" },
     { name = "azure-storage-file-datalake" },
+    { name = "duckdb" },
     { name = "httpx" },
     { name = "polars" },
 ]
@@ -632,6 +633,7 @@ dev = [
 requires-dist = [
     { name = "azure-identity", specifier = ">=1.27.0" },
     { name = "azure-storage-file-datalake", specifier = ">=12.26.1" },
+    { name = "duckdb", specifier = ">=2.0.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "polars", specifier = ">=2.1.0" },
 ]
