@@ -1,11 +1,20 @@
-
-import json
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import httpx
 
 TED_URL = "https://api.ted.europa.eu/v3/notices/search"
+
+SEARCH_FIELDS = [
+    "publication-number",
+    "publication-date",
+    "notice-title",
+    "buyer-name",
+    "buyer-country",
+    "classification-cpv",
+    "notice-type",
+]
+
 
 
 def build_query(since: date) -> str:
@@ -21,21 +30,14 @@ def main() -> None:
     since = datetime.now(UTC).date() - timedelta(days=45)
 
     payload = {
-        "query": build_query(since),
-        "fields": [
-            "publication-number",
-            "publication-date",
-            "notice-title",
-            "buyer-name",
-            "buyer-country",
-            "classification-cpv",
-            "notice-type",
-        ],
-        "page": 1,
-        "limit": 10,
-        "scope": "ALL",
-        "paginationMode": "PAGE_NUMBER",
-    }
+            "query": build_query(since),
+            "fields": SEARCH_FIELDS,
+            "page": 1,
+            "limit": 10,
+            "scope": "ALL",
+            "paginationMode": "PAGE_NUMBER",
+        }
+
 
     print("Query:", payload["query"])
 
@@ -70,13 +72,21 @@ def main() -> None:
         )
 
     if notices:
-        print(
-            "First notice title:",
-            json.dumps(
-                notices[0].get("notice-title"),
-                ensure_ascii=False,
-            ),
-        )
+        first_notice = notices[0]
+        titles = first_notice.get("notice-title", {})
+
+        print("\nAvailable fields:")
+        print(sorted(first_notice.keys()))
+
+        if isinstance(titles, dict):
+            title_pl = titles.get("pol") or titles.get("eng")
+        else:
+            title_pl = titles
+
+        print("\nFirst notice:")
+        print("ID:", first_notice.get("publication-number"))
+        print("Title:", title_pl)
+        print("Date:", first_notice.get("publication-date"))
 
 
 if __name__ == "__main__":
