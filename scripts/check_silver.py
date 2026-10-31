@@ -1,61 +1,26 @@
 
-import duckdb
+import argparse
+from pathlib import Path
+
+from tenderscope.quality.silver import validate_silver
 
 
 def main() -> None:
-    con = duckdb.connect(":memory:")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-dir", required=True, type=Path)
+    parser.add_argument("--allow-partial", action="store_true")
 
-    con.execute("""
-        CREATE VIEW notice AS
-        SELECT * FROM read_parquet('data/silver/notice.parquet')
-    """)
+    args = parser.parse_args()
 
-    con.execute("""
-        CREATE VIEW notice_cpv AS
-        SELECT * FROM read_parquet('data/silver/notice_cpv.parquet')
-    """)
+    metrics = validate_silver(
+        args.run_dir,
+        allow_partial=args.allow_partial,
+    )
 
-    con.execute("""
-        CREATE VIEW notice_buyer AS
-        SELECT * FROM read_parquet('data/silver/notice_buyer.parquet')
-    """)
+    print("\n=== VALIDATION METRICS ===")
 
-    print("\n=== DATA QUALITY ===")
-
-    print(con.sql("""
-        SELECT
-            COUNT(*) AS total_notices,
-            COUNT(DISTINCT notice_id) AS unique_notices,
-            COUNT(*) - COUNT(DISTINCT notice_id) AS duplicates,
-            COUNT(*) FILTER (
-                WHERE title_pl IS NULL OR TRIM(title_pl) = ''
-            ) AS missing_titles
-        FROM notice
-    """))
-
-    print("\n=== CPV DISTRIBUTION ===")
-
-    print(con.sql("""
-        SELECT
-            cpv_code,
-            COUNT(DISTINCT notice_id) AS notice_count
-        FROM notice_cpv
-        GROUP BY cpv_code
-        ORDER BY notice_count DESC, cpv_code
-        LIMIT 10
-    """))
-
-    print("\n=== ORPHAN CPV RELATIONSHIPS ===")
-
-    print(con.sql("""
-        SELECT COUNT(*) AS orphan_count
-        FROM notice_cpv c
-        LEFT JOIN notice n
-            ON c.notice_id = n.notice_id
-        WHERE n.notice_id IS NULL
-    """))
-
-    con.close()
+    for name, value in metrics.items():
+        print(f"{name}: {value}")
 
 
 if __name__ == "__main__":

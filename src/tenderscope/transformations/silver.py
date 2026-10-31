@@ -1,9 +1,12 @@
 
-import json
+
+import argparse
 from datetime import date
 from pathlib import Path
 
 import polars as pl
+
+from tenderscope.transformations.bronze_reader import load_bronze_run
 
 
 def extract_buyers(raw: object) -> list[str]:
@@ -96,35 +99,54 @@ def transform_notices(notices: list[dict]) -> tuple:
     return notice_rows, cpv_rows, buyer_rows
 
 
+def write_silver(
+        run_dir: Path,
+        *,
+        allow_partial: bool = False,
+    ) -> dict[str, int]:
+        notices = load_bronze_run(
+            run_dir,
+            allow_partial=allow_partial,
+        )
+
+        notice_rows, cpv_rows, buyer_rows = transform_notices(notices)
+
+        target = Path("data/silver") / run_dir.name
+        target.mkdir(parents=True, exist_ok=True)
+
+        pl.DataFrame(notice_rows).write_parquet(
+            target / "notice.parquet"
+        )
+        pl.DataFrame(cpv_rows).write_parquet(
+            target / "notice_cpv.parquet"
+        )
+        pl.DataFrame(buyer_rows).write_parquet(
+            target / "notice_buyer.parquet"
+        )
+
+        return {
+            "notices": len(notice_rows),
+            "cpv_relationships": len(cpv_rows),
+            "buyer_relationships": len(buyer_rows),
+        }
+
+
 def main() -> None:
-    source = Path("data/raw/ted_sample.json")
-    target = Path("data/silver")
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--run-dir", required=True, type=Path)
+    parser.add_argument("--allow-partial", action="store_true")
+    args = parser.parse_args()
 
-    with source.open(encoding="utf-8") as file:
-        data = json.load(file)
-
-    notices = data["notices"]
-
-    notice_rows, cpv_rows, buyer_rows = transform_notices(notices)
-
-    target.mkdir(parents=True, exist_ok=True)
-
-    pl.DataFrame(notice_rows).write_parquet(
-        target / "notice.parquet"
+    metrics = write_silver(
+        args.run_dir,
+        allow_partial=args.allow_partial,
     )
 
-    pl.DataFrame(cpv_rows).write_parquet(
-        target / "notice_cpv.parquet"
-    )
+    print("\n=== SILVER TRANSFORMATION ===")
+    print("Run:", args.run_dir.name)
 
-    pl.DataFrame(buyer_rows).write_parquet(
-        target / "notice_buyer.parquet"
-    )
-
-    print("Silver transformation completed")
-    print("Notices:", len(notice_rows))
-    print("Notice-CPV relationships:", len(cpv_rows))
-    print("Notice-buyer relationships:", len(buyer_rows))
+    for name, value in metrics.items():
+        print(f"{name}: {value}")
 
 
 if __name__ == "__main__":

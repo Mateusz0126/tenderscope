@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "azure-identity>=1.27.0",
+    "azure-storage-file-datalake>=12.26.1",
     "httpx>=0.28.1",
     "polars>=2.1.0",
 ]
