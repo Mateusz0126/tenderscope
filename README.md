@@ -183,6 +183,8 @@ uv run ruff check .
 
 Pull requests and pushes to `main` run Ruff, pytest, and a Docker image build in GitHub Actions. The workflow has read-only repository permissions and does not receive Azure credentials.
 
+Dev deployments use a separate, manually approved OIDC workflow. See [Supervised dev deployment](docs/deployment.md) for its trust boundary and required GitHub environment configuration.
+
 ## Roadmap
 
 - [x] TED API ingestion with retries and iterative pagination

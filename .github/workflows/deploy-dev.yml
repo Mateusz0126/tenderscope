@@ -1,0 +1,135 @@
+name: Deploy dev
+
+run-name: Deploy dev from ${{ github.sha }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy dev
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: dev
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate deployment configuration
+        shell: bash
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+          AZURE_IMAGE_REPOSITORY: ${{ vars.AZURE_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          for name in \
+            AZURE_CLIENT_ID \
+            AZURE_TENANT_ID \
+            AZURE_SUBSCRIPTION_ID \
+            AZURE_RESOURCE_GROUP \
+            AZURE_ACR_NAME \
+            AZURE_JOB_NAME \
+            AZURE_IMAGE_REPOSITORY
+          do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub environment value: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Sign in to Azure Container Registry
+        run: az acr login --name "${{ vars.AZURE_ACR_NAME }}"
+
+      - name: Build and push immutable image
+        id: image
+        shell: bash
+        env:
+          ACR_NAME: ${{ vars.AZURE_ACR_NAME }}
+          IMAGE_REPOSITORY: ${{ vars.AZURE_IMAGE_REPOSITORY }}
+        run: |
+          set -euo pipefail
+          login_server="${ACR_NAME}.azurecr.io"
+          tagged_image="${login_server}/${IMAGE_REPOSITORY}:${GITHUB_SHA}"
+
+          docker build --pull --tag "${tagged_image}" .
+          docker push "${tagged_image}"
+
+          digest="$(
+            az acr manifest show-metadata \
+              --registry "${ACR_NAME}" \
+              --name "${IMAGE_REPOSITORY}:${GITHUB_SHA}" \
+              --query digest \
+              --output tsv
+          )"
+
+          if [[ -z "${digest}" ]]; then
+            echo "Azure Container Registry did not return an image digest." >&2
+            exit 1
+          fi
+
+          echo "reference=${login_server}/${IMAGE_REPOSITORY}@${digest}" >> "${GITHUB_OUTPUT}"
+
+      - name: Update Container Apps Job image
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+          IMAGE_REFERENCE: ${{ steps.image.outputs.reference }}
+        run: |
+          az containerapp job update \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_JOB_NAME}" \
+            --image "${IMAGE_REFERENCE}"
+
+      - name: Verify deployed image
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+          EXPECTED_IMAGE: ${{ steps.image.outputs.reference }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          deployed_image="$(
+            az containerapp job show \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --name "${AZURE_JOB_NAME}" \
+              --query 'properties.template.containers[0].image' \
+              --output tsv
+          )"
+
+          if [[ "${deployed_image}" != "${EXPECTED_IMAGE}" ]]; then
+            echo "Deployed image does not match the pushed digest." >&2
+            exit 1
+          fi
+
+          echo "Deployed ${deployed_image}"
