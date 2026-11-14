@@ -1,7 +1,10 @@
 
 import argparse
+import os
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import httpx
@@ -9,6 +12,7 @@ import httpx
 from tenderscope.ingestion.ted_api import build_query
 from tenderscope.ingestion.ted_pages import run_download
 from tenderscope.quality.silver import validate_silver
+from tenderscope.storage.adls import publish_run_to_adls
 from tenderscope.transformations.bronze_reader import load_bronze_run
 from tenderscope.transformations.silver import write_silver
 
@@ -20,6 +24,7 @@ def run_pipeline(
     query: str | None,
     max_pages: int,
     allow_partial: bool = False,
+    publisher: Callable[[Path, Path], dict[str, object]] | None = None,
 ) -> dict:
     start_time = time.monotonic()
 
@@ -63,6 +68,14 @@ def run_pipeline(
         allow_partial=allow_partial,
     )
 
+    storage_metrics = None
+
+    if publisher is not None:
+        print("\n[5/5] ADLS publication")
+        silver_dir = Path("data/silver") / run_dir.name
+        storage_metrics = publisher(run_dir, silver_dir)
+        print("ADLS metrics:", storage_metrics)
+
     duration = round(time.monotonic() - start_time, 2)
 
     results = {
@@ -70,6 +83,7 @@ def run_pipeline(
         "bronze_records": len(notices),
         "silver_metrics": silver_metrics,
         "quality_metrics": quality_metrics,
+        "storage_metrics": storage_metrics,
         "duration_seconds": duration,
     }
 
@@ -100,6 +114,16 @@ def main() -> None:
         action="store_true",
     )
 
+    parser.add_argument(
+        "--storage-account",
+        default=os.environ.get("TENDERSCOPE_STORAGE_ACCOUNT"),
+    )
+
+    parser.add_argument(
+        "--storage-prefix",
+        default=os.environ.get("TENDERSCOPE_STORAGE_PREFIX", "runs"),
+    )
+
     args = parser.parse_args()
 
     if args.resume:
@@ -119,6 +143,15 @@ def main() -> None:
 
         run_dir = Path("data/raw") / f"ted_{run_id}"
 
+    publisher = None
+
+    if args.storage_account:
+        publisher = partial(
+            publish_run_to_adls,
+            args.storage_account,
+            prefix=args.storage_prefix,
+        )
+
     with httpx.Client(timeout=30.0) as client:
         run_pipeline(
             client,
@@ -126,6 +159,7 @@ def main() -> None:
             query=query,
             max_pages=args.max_pages,
             allow_partial=args.allow_partial,
+            publisher=publisher,
         )
 
 

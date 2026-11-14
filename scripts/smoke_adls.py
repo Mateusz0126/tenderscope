@@ -4,7 +4,7 @@ import os
 from azure.identity import DefaultAzureCredential
 from azure.storage.filedatalake import DataLakeServiceClient
 
-account = os.environ["sttenderscope123123"]
+account = os.environ["TENDERSCOPE_STORAGE_ACCOUNT"]
 
 service = DataLakeServiceClient(
     account_url=f"https://{account}.dfs.core.windows.net",
