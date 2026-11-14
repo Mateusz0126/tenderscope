@@ -37,9 +37,10 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
     received_tokens = []
     published = {}
 
-    def publish(bronze_dir, silver_dir):
+    def publish(bronze_dir, silver_dir, gold_dir):
         published["bronze_dir"] = bronze_dir
         published["silver_dir"] = silver_dir
+        published["gold_dir"] = gold_dir
         return {"success_marker": "runs/ted_test/_SUCCESS.json"}
 
     def mock_ted(request: httpx.Request) -> httpx.Response:
@@ -91,12 +92,22 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
     assert result["bronze_records"] == 2
     assert result["silver_metrics"]["notices"] == 2
     assert result["quality_metrics"]["checks_passed"] == 8
+    assert result["gold_metrics"] == {
+        "notices": 2,
+        "unique_buyers": 1,
+        "unique_cpv_codes": 2,
+        "notice_types": 1,
+        "files": 6,
+    }
     assert result["storage_metrics"] == {
         "success_marker": "runs/ted_test/_SUCCESS.json"
     }
     assert published["bronze_dir"] == run_dir
     assert published["silver_dir"].resolve() == (
         tmp_path / "data/silver/ted_test"
+    )
+    assert published["gold_dir"].resolve() == (
+        tmp_path / "data/gold/ted_test"
     )
 
     manifest = json.loads(
@@ -213,6 +224,13 @@ def test_pipeline_accepts_completed_empty_date_window(
         "silver_records": 0,
         "checks_passed": 8,
     }
+    assert result["gold_metrics"] == {
+        "notices": 0,
+        "unique_buyers": 0,
+        "unique_cpv_codes": 0,
+        "notice_types": 0,
+        "files": 6,
+    }
 
     silver_dir = tmp_path / "data/silver/ted_empty"
 
@@ -225,3 +243,4 @@ def test_pipeline_accepts_completed_empty_date_window(
         "notice_type": pl.String,
         "xml_url": pl.String,
     }
+

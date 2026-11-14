@@ -2,9 +2,9 @@
 
 **An end-to-end Data Engineering project for exploring European public procurement notices.**
 
-TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, and validates data quality with DuckDB.
+TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, validates data quality with DuckDB, and builds run-level Gold procurement KPIs with a static HTML report.
 
-> **Project status:** Working Bronze → Silver pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, approval-gated Azure deployment and manual ETL workflows, and successful reviewed cloud data runs. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
+> **Project status:** Working Bronze → Silver → Gold pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, approval-gated Azure deployment and manual ETL workflows, and successful reviewed cloud data runs. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
 
 ## Architecture
 
@@ -26,12 +26,17 @@ Silver (Parquet)
          v
 Validated Silver datasets
          |
+         | Polars aggregations
+         v
+Gold (run-level KPIs + static HTML report)
+         |
          | publish only after the quality gate passes
          v
 Azure Data Lake Storage Gen2
   ├── bronze/runs/<run_id>/
-  └── silver/runs/<run_id>/
+  ├── silver/runs/<run_id>/
       └── _SUCCESS.json
+  └── gold/runs/<run_id>/
 ```
 
 The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze and Silver files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written last, so consumers can distinguish complete runs from interrupted uploads.
@@ -45,6 +50,7 @@ The pipeline always writes and validates local working files first. When `TENDER
 | API client | HTTPX |
 | Data transformation | Polars |
 | Storage format | JSON (Bronze), Parquet (Silver) |
+| Analytical output | Parquet + JSON + self-contained HTML (Gold) |
 | Data quality | DuckDB |
 | Cloud storage | Azure Data Lake Storage Gen2, Azure Identity |
 | Containerization | Docker |
@@ -71,7 +77,8 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 │   │   └── ted_pages.py        # Pagination, retry, checkpoints and manifests
 │   ├── transformations/
 │   │   ├── bronze_reader.py    # Read and validate raw page files
-│   │   └── silver.py           # Normalize notices and write Parquet
+│   │   ├── silver.py           # Normalize notices and write Parquet
+│   │   └── gold.py             # Build KPIs and the static report
 │   ├── quality/
 │   │   └── silver.py           # DuckDB data-quality gate
 │   ├── storage/
@@ -86,7 +93,7 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 └── README.md
 ```
 
-Local runtime output is stored under `data/raw/` and `data/silver/`, both ignored by Git.
+Local runtime output is stored under `data/raw/`, `data/silver/` and `data/gold/`, all ignored by Git.
 
 ## Quick start
 
@@ -133,12 +140,13 @@ In Azure Container Apps, `DefaultAzureCredential` uses the job's user-assigned m
 
 The `--allow-partial` flag is needed when the configured page limit is reached before the API's complete result set has been downloaded. It allows the available subset to be transformed and validated. For full extraction, use a sufficiently high `--max-pages` and run without `--allow-partial`.
 
-The pipeline performs four steps:
+The pipeline performs five steps:
 
 1. Download TED API result pages into a run-specific Bronze directory.
 2. Validate the Bronze manifest and read its notices.
 3. Transform notices into three Silver Parquet datasets.
 4. Run DuckDB data-quality checks; fail the run if any check fails.
+5. Build run-level Gold summaries and a self-contained HTML report.
 
 Each run gets a UTC-based identifier such as `ted_YYYYMMDDTHHMMSSffffffZ`.
 
@@ -159,11 +167,19 @@ data/
 │       ├── manifest.json
 │       ├── page_001.json
 │       └── page_002.json
-└── silver/
+├── silver/
+│   └── ted_<run_id>/
+│       ├── notice.parquet
+│       ├── notice_cpv.parquet
+│       └── notice_buyer.parquet
+└── gold/
     └── ted_<run_id>/
-        ├── notice.parquet
-        ├── notice_cpv.parquet
-        └── notice_buyer.parquet
+        ├── daily_summary.parquet
+        ├── buyer_summary.parquet
+        ├── cpv_summary.parquet
+        ├── notice_type_summary.parquet
+        ├── summary.json
+        └── report.html
 ```
 
 With ADLS publication enabled, the same run is uploaded as:
@@ -175,6 +191,12 @@ silver/runs/ted_<run_id>/notice.parquet
 silver/runs/ted_<run_id>/notice_cpv.parquet
 silver/runs/ted_<run_id>/notice_buyer.parquet
 silver/runs/ted_<run_id>/_SUCCESS.json
+gold/runs/ted_<run_id>/daily_summary.parquet
+gold/runs/ted_<run_id>/buyer_summary.parquet
+gold/runs/ted_<run_id>/cpv_summary.parquet
+gold/runs/ted_<run_id>/notice_type_summary.parquet
+gold/runs/ted_<run_id>/summary.json
+gold/runs/ted_<run_id>/report.html
 ```
 
 | Silver dataset | Grain | Example fields |
@@ -245,11 +267,13 @@ Azure resource definitions, adoption guidance and the optional project budget ar
 - [x] Add controlled incremental date windows while keeping execution manual
 - [x] Add an approval-gated manual GitHub workflow for bounded ETL date windows
 - [ ] Persist a watermark only after a complete, quality-gated run
-- [ ] Build Gold analytical models and procurement KPIs
-- [ ] Add dashboard and operational monitoring
+- [x] Build run-level Gold analytical models and procurement KPIs
+- [x] Add a zero-hosting-cost static dashboard report
+- [ ] Add operational monitoring
 
 ## Why this project?
 
 TenderScope demonstrates practical Data Engineering patterns using a real public API: resilient ingestion, reproducible run-based raw storage, transformation into analytical datasets, relational modeling, automated data-quality gates and a path toward cloud deployment.
 
 **Data source:** European Union [Tenders Electronic Daily (TED)](https://ted.europa.eu/). TenderScope is an independent portfolio project and is not affiliated with TED or the European Commission.
+

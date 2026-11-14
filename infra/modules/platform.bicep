@@ -137,6 +137,16 @@ resource silver 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-
   }
 }
 
+resource gold 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'gold'
+  properties: {
+    defaultEncryptionScope: '$account-encryption-key'
+    denyEncryptionScopeOverride: false
+    publicAccess: 'None'
+  }
+}
+
 resource runtimeIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: names.runtimeIdentity
   location: location
@@ -273,6 +283,16 @@ resource runtimeSilverContributor 'Microsoft.Authorization/roleAssignments@2022-
   }
 }
 
+resource runtimeGoldContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: gold
+  name: roleAssignmentNames.?runtimeGoldContributor ?? guid(gold.id, runtimeIdentity.id, storageBlobDataContributorRoleDefinitionId)
+  properties: {
+    principalId: runtimeIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+  }
+}
+
 resource deploymentAcrPush 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: registry
   name: roleAssignmentNames.?deploymentAcrPush ?? guid(registry.id, deploymentIdentity.id, acrPushRoleDefinitionId)
@@ -307,3 +327,4 @@ output containerAppJobName string = job.name
 output deploymentIdentityName string = deploymentIdentity.name
 output runnerIdentityName string = runnerIdentity.name
 output runtimeIdentityName string = runtimeIdentity.name
+

@@ -111,21 +111,24 @@ def publish_run_with_client(
     service_client: ServiceClient,
     run_dir: Path,
     silver_dir: Path,
+    gold_dir: Path,
     *,
     prefix: str = "runs",
     now: Callable[[], datetime] = lambda: datetime.now(UTC),
 ) -> dict[str, object]:
-    if run_dir.name != silver_dir.name:
-        raise ValueError("Bronze and Silver run IDs must match")
+    if len({run_dir.name, silver_dir.name, gold_dir.name}) != 1:
+        raise ValueError("Bronze, Silver and Gold run IDs must match")
 
     normalized_prefix = normalize_prefix(prefix)
     target_directory = f"{normalized_prefix}/{run_dir.name}"
 
     bronze = service_client.get_file_system_client("bronze")
     silver = service_client.get_file_system_client("silver")
+    gold = service_client.get_file_system_client("gold")
 
     bronze_files = upload_files(bronze, run_dir, target_directory)
     silver_files = upload_files(silver, silver_dir, target_directory)
+    gold_files = upload_files(gold, gold_dir, target_directory)
 
     marker_path = f"{target_directory}/_SUCCESS.json"
     marker = {
@@ -133,6 +136,7 @@ def publish_run_with_client(
         "published_at_utc": now().astimezone(UTC).isoformat(),
         "bronze_files": bronze_files,
         "silver_files": silver_files,
+        "gold_files": gold_files,
     }
 
     silver.get_file_client(marker_path).upload_data(
@@ -144,6 +148,7 @@ def publish_run_with_client(
         "run_id": run_dir.name,
         "bronze_files": len(bronze_files),
         "silver_files": len(silver_files),
+        "gold_files": len(gold_files),
         "success_marker": marker_path,
     }
 
@@ -152,6 +157,7 @@ def publish_run_to_adls(
     account_name: str,
     run_dir: Path,
     silver_dir: Path,
+    gold_dir: Path,
     *,
     prefix: str = "runs",
 ) -> dict[str, object]:
@@ -168,8 +174,10 @@ def publish_run_to_adls(
             service_client,
             run_dir,
             silver_dir,
+            gold_dir,
             prefix=prefix,
         )
     finally:
         service_client.close()
         credential.close()
+
