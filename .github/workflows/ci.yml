@@ -30,7 +30,7 @@ jobs:
 
       - name: Validate infrastructure templates
         run: |
-          az bicep install --version v0.49.2 --force
+          az bicep install --version v0.49.2
           az bicep build --file infra/main.bicep --stdout > /dev/null
           az bicep build-params --file infra/main.dev.bicepparam --outfile /tmp/main.dev.parameters.json
           az bicep build --file infra/budget.bicep --stdout > /dev/null
