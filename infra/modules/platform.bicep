@@ -147,6 +147,16 @@ resource gold 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05
   }
 }
 
+resource control 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-05-01' = {
+  parent: blobService
+  name: 'control'
+  properties: {
+    defaultEncryptionScope: '$account-encryption-key'
+    denyEncryptionScopeOverride: false
+    publicAccess: 'None'
+  }
+}
+
 resource runtimeIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
   name: names.runtimeIdentity
   location: location
@@ -286,6 +296,16 @@ resource runtimeSilverContributor 'Microsoft.Authorization/roleAssignments@2022-
 resource runtimeGoldContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: gold
   name: roleAssignmentNames.?runtimeGoldContributor ?? guid(gold.id, runtimeIdentity.id, storageBlobDataContributorRoleDefinitionId)
+  properties: {
+    principalId: runtimeIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: storageBlobDataContributorRoleDefinitionId
+  }
+}
+
+resource runtimeControlContributor 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: control
+  name: roleAssignmentNames.?runtimeControlContributor ?? guid(control.id, runtimeIdentity.id, storageBlobDataContributorRoleDefinitionId)
   properties: {
     principalId: runtimeIdentity.properties.principalId
     principalType: 'ServicePrincipal'
