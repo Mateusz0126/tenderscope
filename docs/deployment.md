@@ -63,7 +63,7 @@ Its Azure access is limited to:
 
 The custom role can read and update the job. It cannot start or delete the job, list job secrets, modify role assignments, or access ADLS data.
 
-The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image and accesses only the `bronze`, `silver` and `gold` containers.
+The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image, writes the `bronze`, `silver` and `gold` containers, and reads/conditionally writes the watermark in the private `control` container.
 
 The ETL runner identity `mi-tenderscope-runner-dev` has the custom `TenderScope Container Apps Job Runner` role on this job only. The role contains only job read, execution read and job start actions. It cannot update or delete the job, stop executions, list secrets, modify role assignments, push images or access ADLS directly.
 
@@ -80,6 +80,9 @@ Open **Actions → Run ETL dev → Run workflow** on `main`, then enter `since` 
 - the currently deployed image pinned by SHA-256 digest;
 - one active GitHub workflow at a time;
 - a maximum execution wait of 30 minutes.
+- a durable watermark that rejects gaps, overlaps and stale concurrent writers.
 
-Choose the dates deliberately before each run. Until a durable watermark is implemented, TenderScope does not infer or advance the next date automatically. Keep `--allow-partial` disabled for incremental batches so a page limit cannot be mistaken for a completed date window.
+Choose the dates deliberately before each run. The first state-enforced run bootstraps the stream; every later run must start on the exact next date reported by the watermark. Keep `--allow-partial` disabled so a page-limited subset cannot advance durable state.
+
+Before the first state-enforced execution, deploy the reviewed Bicep change that adds the `control` container and its scoped runtime role. The last verified cloud batch completed `2026-11-11`; use `2026-11-12` as both `since` and `until` for the planned bootstrap. The detailed commit protocol and recovery cases are in [Durable incremental state and recovery](state-and-recovery.md).
 

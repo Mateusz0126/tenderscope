@@ -18,9 +18,11 @@ The committed parameter file contains resource identifiers, not passwords. The b
 - GitHub's deployment identity can push an image and update only the existing job.
 - The deployment identity cannot start or delete the job, read job secrets or access ADLS data.
 - The runner identity can read and start only the existing job and monitor its executions. It cannot update, delete or stop the job, list secrets, push images or access ADLS directly.
-- The runtime identity can pull from ACR and write only to the `bronze`, `silver` and `gold` containers.
+- The runtime identity can pull from ACR, write the `bronze`, `silver` and `gold` data containers, and read/write only the durable watermark in the separate `control` container.
 
 Azure permits callers with the job start action to supply a one-time execution template. The runner identity is therefore protected by the immutable GitHub environment OIDC subject, `main`-only workflow execution and manual `dev` approval in addition to its job-scoped custom role.
+
+The `control` container holds only versioned orchestration state. It is separated from analytical layers so data consumers do not need access to mutable control-plane files. The runtime identity uses ETag preconditions when updating that state; role scope alone does not replace application-level concurrency control.
 
 ## Validate locally
 

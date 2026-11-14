@@ -17,11 +17,13 @@ flowchart LR
     bronze --> silver[ADLS Silver]
     silver --> gold[ADLS Gold]
     gold --> report[Static HTML report]
+    job -->|read + conditional write| control[ADLS Control watermark]
 
     runtime[Runtime managed identity] -->|AcrPull| acr
     runtime -->|write scoped containers| bronze
     runtime --> silver
     runtime --> gold
+    runtime --> control
 ```
 
 ## Pipeline lifecycle
@@ -35,7 +37,8 @@ flowchart LR
 7. Polars creates normalized Silver datasets.
 8. DuckDB runs eight quality checks. Any failure stops publication.
 9. Polars creates Gold summaries and a self-contained HTML report.
-10. The runtime identity uploads all layers and writes Silver `_SUCCESS.json` last.
+10. The runtime identity uploads all layers and writes Silver `_SUCCESS.json`.
+11. The job conditionally advances the versioned Control watermark using the ETag read at startup.
 
 ## Data contracts
 
@@ -45,6 +48,7 @@ flowchart LR
 | Silver | `notice.parquet`, `notice_buyer.parquet`, `notice_cpv.parquet` | Typed analytical tables with uniqueness and referential checks |
 | Gold | four summary Parquet files, `summary.json`, `report.html` | Run-level KPIs for dates, buyers, CPV codes and notice types |
 | Completion | `silver/.../_SUCCESS.json` | Written only after Bronze, Silver and Gold uploads complete |
+| Control | `state/<stream>.json` | Versioned last-completed date, run ID and UTC update timestamp |
 
 The run identifier is UTC-based (`ted_YYYYMMDDTHHMMSSffffffZ`). All three layers use the same identifier, which makes a batch traceable without a separate orchestration database.
 
@@ -54,7 +58,7 @@ The run identifier is UTC-based (`ted_YYYYMMDDTHHMMSSffffffZ`). All three layers
 | --- | --- | --- | --- |
 | Deployment identity | `Deploy dev` | Push to ACR; read and update the existing job | Start/delete job, read job secrets, access ADLS, assign roles |
 | Runner identity | `Run ETL dev` | Read the existing job, start one execution and inspect execution state | Update/delete job, stop executions, push images, access ADLS |
-| Runtime identity | Container Apps Job | Pull its image; write Bronze, Silver and Gold containers | Push images, deploy infrastructure, assign roles |
+| Runtime identity | Container Apps Job | Pull its image; write Bronze, Silver and Gold; read/conditionally write Control state | Push images, deploy infrastructure, assign roles |
 
 GitHub federation is restricted to the repository's protected `dev` environment. The workflows also restrict execution to `main` and request only `contents: read` plus `id-token: write` where Azure login is required.
 
@@ -66,6 +70,8 @@ GitHub federation is restricted to the repository's protected `dev` environment.
 - An incomplete page-limited run is rejected unless partial processing was explicitly allowed.
 - A failed Silver quality check prevents Gold creation and cloud publication.
 - `_SUCCESS.json` is the consumer-facing completion marker; the presence of individual files alone is not success.
+- A watermark advances only after `_SUCCESS.json`; gaps, overlaps, future days and stale ETags are rejected.
+- A crash between `_SUCCESS` and the watermark is at-least-once: data may be republished, but progress is never skipped.
 - GitHub waits for the Azure execution's terminal state and marks the workflow failed unless Azure reports `Succeeded`.
 
 ## Cost and scope decisions
@@ -76,4 +82,4 @@ GitHub federation is restricted to the repository's protected `dev` environment.
 - The dev job uses 0.5 vCPU, 1 GiB memory and a 30-minute execution timeout.
 - ACR uses Basic, Storage uses Standard LRS and Log Analytics retains 30 days.
 
-These decisions are appropriate for a portfolio environment. A production service would normally add durable orchestration state, alerting, retention policies, schema evolution rules and recovery objectives.
+These decisions are appropriate for a portfolio environment. A production service would additionally need proactive alerting, retention policies, schema evolution rules, service objectives and an approved manual state-repair procedure.

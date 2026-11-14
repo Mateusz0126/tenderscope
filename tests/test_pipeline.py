@@ -182,6 +182,76 @@ def test_pipeline_does_not_publish_when_quality_fails(
     assert publish_calls == []
 
 
+def test_pipeline_commits_state_only_after_publication(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / "data/raw/ted_empty"
+    events = []
+
+    def mock_ted(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "notices": [],
+                "iterationNextToken": None,
+                "totalNoticeCount": 0,
+                "timedOut": False,
+            },
+        )
+
+    def publish(*args):
+        events.append("published")
+        return {"success_marker": "runs/ted_empty/_SUCCESS.json"}
+
+    def commit(run_id):
+        events.append("state_committed")
+        assert run_id == "ted_empty"
+        return {"last_completed_date": "2026-11-11"}
+
+    with httpx.Client(
+        transport=httpx.MockTransport(mock_ted)
+    ) as client:
+        result = run_pipeline(
+            client,
+            run_dir,
+            query="publication-date>=20261111",
+            max_pages=1,
+            publisher=publish,
+            state_committer=commit,
+        )
+
+    assert events == ["published", "state_committed"]
+    assert result["state_metrics"] == {
+        "last_completed_date": "2026-11-11"
+    }
+
+
+def test_pipeline_rejects_state_without_publication(tmp_path):
+    with pytest.raises(ValueError, match="requires successful ADLS"):
+        run_pipeline(
+            object(),
+            tmp_path / "data/raw/ted_test",
+            query="buyer-country=POL",
+            max_pages=1,
+            state_committer=lambda run_id: {},
+        )
+
+
+def test_pipeline_rejects_partial_state_commit(tmp_path):
+    with pytest.raises(ValueError, match="cannot advance a partial"):
+        run_pipeline(
+            object(),
+            tmp_path / "data/raw/ted_test",
+            query="buyer-country=POL",
+            max_pages=1,
+            allow_partial=True,
+            publisher=lambda *args: {},
+            state_committer=lambda run_id: {},
+        )
+
+
 def test_pipeline_accepts_completed_empty_date_window(
     tmp_path,
     monkeypatch,

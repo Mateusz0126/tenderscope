@@ -18,11 +18,14 @@ TenderScope ingests public tender notices from the [Tenders Electronic Daily (TE
 | Cloud engineering | ADLS Gen2, ACR and Container Apps Jobs defined with Bicep |
 | Secure delivery | GitHub Actions OIDC, separate managed identities and scoped roles |
 | Operational control | Manual date windows, protected `dev` approvals and immutable image digests |
+| Durable orchestration | Versioned watermark, contiguous windows and ETag conflict protection |
 | Cost awareness | Consumption execution, no scheduler, no hosted dashboard and bounded runs |
 
 ## Project documentation
 
 - [Architecture and trust boundaries](docs/architecture.md)
+- [Codebase structure and dependency rationale](docs/codebase.md)
+- [Durable state, failure modes and recovery](docs/state-and-recovery.md)
 - [Five-to-seven minute demonstration](docs/demo.md)
 - [Current status, evidence, gaps and maturity](docs/project-status.md)
 - [Supervised deployment and ETL execution](docs/deployment.md)
@@ -58,10 +61,12 @@ Azure Data Lake Storage Gen2
   ├── bronze/runs/<run_id>/
   ├── silver/runs/<run_id>/
   │   └── _SUCCESS.json
-  └── gold/runs/<run_id>/
+  ├── gold/runs/<run_id>/
+  └── control/state/ted-poland-it.json
+             └── versioned watermark + ETag
 ```
 
-The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze, Silver and Gold files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written last, after every layer has been uploaded, so consumers can distinguish complete runs from interrupted publications.
+The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze, Silver and Gold files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written after every layer has been uploaded. In state-enforced mode, the watermark is advanced last with an ETag precondition, so consumers can distinguish complete runs and concurrent writers cannot silently overwrite progress.
 
 The complete component and identity flow is documented in [Architecture and trust boundaries](docs/architecture.md).
 
@@ -179,15 +184,30 @@ uv run python -m tenderscope.pipeline --max-pages 2 --allow-partial
 
 In Azure Container Apps, `DefaultAzureCredential` uses the job's user-assigned managed identity selected through `AZURE_CLIENT_ID`. No storage key or connection string is required.
 
+For a state-enforced cloud batch, add `--state-policy enforce`. The first run for a new stream requires `--since`; subsequent runs must begin exactly one day after the stored watermark. If dates are omitted after bootstrap, TenderScope selects the next completed UTC day automatically.
+
+```powershell
+$env:TENDERSCOPE_STORAGE_ACCOUNT = "<storage-account-name>"
+uv run python -m tenderscope.pipeline `
+  --since 2026-11-12 `
+  --until 2026-11-12 `
+  --max-pages 2 `
+  --state-policy enforce
+```
+
+See [Durable incremental state and recovery](docs/state-and-recovery.md) before bootstrapping or repairing a stream.
+
 The `--allow-partial` flag is needed when the configured page limit is reached before the API's complete result set has been downloaded. It allows the available subset to be transformed and validated. For full extraction, use a sufficiently high `--max-pages` and run without `--allow-partial`.
 
-The pipeline performs five steps:
+The local pipeline performs five core steps:
 
 1. Download TED API result pages into a run-specific Bronze directory.
 2. Validate the Bronze manifest and read its notices.
 3. Transform notices into three Silver Parquet datasets.
 4. Run DuckDB data-quality checks; fail the run if any check fails.
 5. Build run-level Gold summaries and a self-contained HTML report.
+
+Cloud mode adds ADLS publication as step six. State-enforced mode adds the conditional watermark commit as step seven.
 
 Each run gets a UTC-based identifier such as `ted_YYYYMMDDTHHMMSSffffffZ`.
 
@@ -258,6 +278,9 @@ gold/runs/ted_<run_id>/report.html
 - Bronze record-count and page-sequence validation.
 - Protection against silently accepting incomplete runs unless explicitly allowed.
 - Inclusive `--since`/`--until` windows for controlled incremental batches.
+- A versioned durable watermark committed only after `_SUCCESS`.
+- Exact next-day enforcement prevents date gaps and overlaps.
+- Conditional ETag writes reject stale or concurrent state updates.
 
 **Silver quality gate (8 checks)**
 
@@ -309,10 +332,11 @@ For a portfolio walkthrough, use the [short demonstration script](docs/demo.md).
 - [x] Describe the Azure platform and cost guardrails with Bicep
 - [x] Add controlled incremental date windows while keeping execution manual
 - [x] Add an approval-gated manual GitHub workflow for bounded ETL date windows
-- [ ] Persist a watermark only after a complete, quality-gated run
+- [x] Persist a versioned watermark only after a complete, quality-gated run
 - [x] Build run-level Gold analytical models and procurement KPIs
 - [x] Add a zero-hosting-cost static dashboard report
 - [ ] Add operational monitoring
+- [ ] Add versioned source and Silver schema compatibility checks
 
 The unchecked items are deliberate production gaps, not hidden features. Their impact and priority are explained in [Current status and maturity](docs/project-status.md).
 
