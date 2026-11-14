@@ -13,6 +13,7 @@ param names = {
   containerAppJob: 'caj-tenderscope-etl-dev'
   runtimeIdentity: 'mi-tenderscope-job-dev'
   deploymentIdentity: 'mi-tenderscope-github-dev'
+  runnerIdentity: 'mi-tenderscope-runner-dev'
 }
 
 param roleAssignmentNames = {

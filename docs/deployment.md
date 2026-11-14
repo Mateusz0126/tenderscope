@@ -1,4 +1,4 @@
-# Supervised dev deployment
+# Supervised dev deployment and ETL execution
 
 TenderScope uses GitHub Actions OpenID Connect (OIDC) to deploy to Azure without a client secret or a stored Azure password.
 
@@ -16,6 +16,8 @@ The `Deploy dev` workflow:
 
 The job remains intentionally manual after the first successful, quality-gated Bronze and Silver publication to ADLS Gen2. This keeps every data run and its cost under the repository owner's control.
 
+The separate `Run ETL dev` workflow accepts an inclusive historical date window, waits for the same `dev` approval, starts exactly one execution and waits for its terminal status. It has no schedule.
+
 ## GitHub environment
 
 Create an environment named `dev` in **Settings → Environments**.
@@ -31,6 +33,7 @@ Add these environment secrets:
 | Name | Azure source |
 | --- | --- |
 | `AZURE_CLIENT_ID` | Client ID of `mi-tenderscope-github-dev` |
+| `AZURE_ETL_CLIENT_ID` | Client ID of `mi-tenderscope-runner-dev` |
 | `AZURE_TENANT_ID` | Tenant ID of the Azure subscription |
 | `AZURE_SUBSCRIPTION_ID` | Azure subscription ID |
 
@@ -62,19 +65,20 @@ The custom role can read and update the job. It cannot start or delete the job, 
 
 The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image and accesses only the `bronze` and `silver` containers.
 
+The ETL runner identity `mi-tenderscope-runner-dev` has the custom `TenderScope Container Apps Job Runner` role on this job only. The role contains only job read, execution read and job start actions. It cannot update or delete the job, stop executions, list secrets, modify role assignments, push images or access ADLS directly.
+
+Azure's start operation can accept a one-time execution template. Consequently, any identity with `Microsoft.App/jobs/start/action` must be treated as trusted to use the job's configured secrets and managed identities. TenderScope reduces that risk by using a dedicated identity, an immutable repository/environment OIDC subject, `main`-only workflow execution, environment approval, fixed workflow code and a job-scoped role assignment.
+
 The matching Bicep definitions are in [`infra/`](../infra/README.md). CI validates them but never deploys infrastructure or starts the ETL job.
 
-## Manual incremental execution
+## Manual incremental execution in GitHub
 
-After an approved deployment, a single execution can override the container arguments without changing the job's manual trigger or stored schedule:
+Open **Actions → Run ETL dev → Run workflow** on `main`, then enter `since` and `until` as ISO dates. The workflow enforces:
 
-```powershell
-az containerapp job start `
-  --resource-group rg-tenderscope-dev `
-  --name caj-tenderscope-etl-dev `
-  --container-name caj-tenderscope-etl-dev `
-  --args "--max-pages" "2" `
-         "--since" "2026-11-02" "--until" "2026-11-02"
-```
+- completed historical dates only;
+- an inclusive window of at most seven days;
+- the currently deployed image pinned by SHA-256 digest;
+- one active GitHub workflow at a time;
+- a maximum execution wait of 30 minutes.
 
 Choose the dates deliberately before each run. Until a durable watermark is implemented, TenderScope does not infer or advance the next date automatically. Keep `--allow-partial` disabled for incremental batches so a page limit cannot be mistaken for a completed date window.

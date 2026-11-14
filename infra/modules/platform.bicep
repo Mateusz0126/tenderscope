@@ -4,6 +4,7 @@ param location string
 param initialContainerImage string
 param githubOidcSubject string
 param jobDeployerRoleDefinitionId string
+param jobRunnerRoleDefinitionId string
 param names object
 param roleAssignmentNames object = {}
 
@@ -151,9 +152,31 @@ resource deploymentIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@20
   }
 }
 
+resource runnerIdentity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: names.runnerIdentity
+  location: location
+  tags: {
+    environment: 'dev'
+    project: 'TenderScope'
+    purpose: 'github-etl-runner'
+  }
+}
+
 resource githubFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
   parent: deploymentIdentity
   name: 'fic-github-tenderscope-dev'
+  properties: {
+    audiences: [
+      'api://AzureADTokenExchange'
+    ]
+    issuer: 'https://token.actions.githubusercontent.com'
+    subject: githubOidcSubject
+  }
+}
+
+resource runnerGithubFederatedCredential 'Microsoft.ManagedIdentity/userAssignedIdentities/federatedIdentityCredentials@2023-01-31' = {
+  parent: runnerIdentity
+  name: 'fic-github-tenderscope-runner-dev'
   properties: {
     audiences: [
       'api://AzureADTokenExchange'
@@ -270,6 +293,17 @@ resource deploymentJobUpdater 'Microsoft.Authorization/roleAssignments@2022-04-0
   }
 }
 
+resource runnerJobStarter 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: job
+  name: roleAssignmentNames.?runnerJobStarter ?? guid(job.id, runnerIdentity.id, jobRunnerRoleDefinitionId)
+  properties: {
+    principalId: runnerIdentity.properties.principalId
+    principalType: 'ServicePrincipal'
+    roleDefinitionId: jobRunnerRoleDefinitionId
+  }
+}
+
 output containerAppJobName string = job.name
 output deploymentIdentityName string = deploymentIdentity.name
+output runnerIdentityName string = runnerIdentity.name
 output runtimeIdentityName string = runtimeIdentity.name
