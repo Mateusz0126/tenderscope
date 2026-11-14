@@ -17,6 +17,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  bicep:
+    name: Bicep
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Validate infrastructure templates
+        run: |
+          az bicep install --version v0.49.2 --force
+          az bicep build --file infra/main.bicep --stdout > /dev/null
+          az bicep build-params --file infra/main.dev.bicepparam --outfile /tmp/main.dev.parameters.json
+          az bicep build --file infra/budget.bicep --stdout > /dev/null
+
   quality:
     name: Quality
     runs-on: ubuntu-24.04

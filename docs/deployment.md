@@ -14,7 +14,7 @@ The `Deploy dev` workflow:
 6. verifies the configured image;
 7. does **not** start the job.
 
-The job remains manual until the first quality-gated Bronze and Silver publication to ADLS Gen2 has been reviewed.
+The job remains intentionally manual after the first successful, quality-gated Bronze and Silver publication to ADLS Gen2. This keeps every data run and its cost under the repository owner's control.
 
 ## GitHub environment
 
@@ -47,10 +47,10 @@ Add these environment variables:
 
 ## Azure trust and authorization
 
-The user-assigned managed identity `mi-tenderscope-github-dev` trusts only this OIDC subject:
+The user-assigned managed identity `mi-tenderscope-github-dev` trusts only the immutable repository and owner IDs for the protected `dev` environment:
 
 ```text
-repo:Mateusz0126/tenderscope:environment:dev
+repo:Mateusz0126@29069191/tenderscope@1440847144:environment:dev
 ```
 
 Its Azure access is limited to:
@@ -61,3 +61,5 @@ Its Azure access is limited to:
 The custom role can read and update the job. It cannot start or delete the job, list job secrets, modify role assignments, or access ADLS data.
 
 The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image and accesses only the `bronze` and `silver` containers.
+
+The matching Bicep definitions are in [`infra/`](../infra/README.md). CI validates them but never deploys infrastructure or starts the ETL job.

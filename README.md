@@ -4,7 +4,7 @@
 
 TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, and validates data quality with DuckDB.
 
-> **Project status:** Working Bronze → Silver pipeline with automated quality checks, optional ADLS Gen2 publication, pull-request CI, and an approval-gated Azure deployment workflow. The Container Apps Job remains manual until its first cloud data run is reviewed.
+> **Project status:** Working Bronze → Silver pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, an approval-gated Azure deployment workflow, and a successful reviewed cloud data run. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
 
 ## Architecture
 
@@ -79,6 +79,7 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 │   └── pipeline.py             # End-to-end orchestration
 ├── scripts/
 │   └── smoke_adls.py           # Standalone ADLS connectivity smoke test
+├── infra/                      # Reproducible Azure Bicep templates
 ├── Dockerfile
 ├── .dockerignore
 ├── pyproject.toml
@@ -210,6 +211,8 @@ Pull requests and pushes to `main` run Ruff, pytest, and a Docker image build in
 
 Dev deployments use a separate, manually approved OIDC workflow. See [Supervised dev deployment](docs/deployment.md) for its trust boundary and required GitHub environment configuration.
 
+Azure resource definitions, adoption guidance and the optional project budget are documented in [Azure infrastructure](infra/README.md). Infrastructure and budget deployments are previewed with Azure `what-if` and are never applied by CI.
+
 ## Roadmap
 
 - [x] TED API ingestion with retries and iterative pagination
@@ -221,7 +224,9 @@ Dev deployments use a separate, manually approved OIDC workflow. See [Supervised
 - [x] Verify Docker build and container execution
 - [x] Add CI checks (pytest, Ruff, Docker build)
 - [x] Integrate quality-gated Bronze/Silver upload to ADLS Gen2
-- [ ] Deploy scheduled cloud execution with managed identity
+- [x] Deploy manual cloud execution with managed identity and verify an ADLS run
+- [x] Describe the Azure platform and cost guardrails with Bicep
+- [ ] Add incremental ingestion while keeping execution manual
 - [ ] Build Gold analytical models and procurement KPIs
 - [ ] Add dashboard and operational monitoring
 

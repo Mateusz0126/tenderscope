@@ -25,6 +25,10 @@ htmlcov/
 data/raw/
 data/silver/
 
+# Locally compiled Bicep output
+infra/*.json
+infra/modules/*.json
+
 # IDE
 .vscode/
 .idea/
