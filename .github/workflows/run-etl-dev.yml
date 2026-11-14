@@ -1,0 +1,213 @@
+name: Run ETL dev
+
+run-name: Run ETL dev ${{ inputs.since }} to ${{ inputs.until }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      since:
+        description: First publication date (YYYY-MM-DD)
+        required: true
+        type: string
+      until:
+        description: Last publication date (YYYY-MM-DD, maximum 7 days inclusive)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: run-etl-dev
+  cancel-in-progress: false
+
+jobs:
+  run:
+    name: Run ETL dev
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment:
+      name: dev
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Validate date window
+        shell: bash
+        env:
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from datetime import UTC, date, datetime
+
+          since_text = os.environ["SINCE"]
+          until_text = os.environ["UNTIL"]
+
+          try:
+              since = date.fromisoformat(since_text)
+              until = date.fromisoformat(until_text)
+          except ValueError as exc:
+              raise SystemExit("Dates must use the YYYY-MM-DD format.") from exc
+
+          if since > until:
+              raise SystemExit("The since date must not be after the until date.")
+
+          window_days = (until - since).days + 1
+          if window_days > 7:
+              raise SystemExit("The ETL window must not exceed 7 inclusive days.")
+
+          today_utc = datetime.now(UTC).date()
+          if until >= today_utc:
+              raise SystemExit("Use completed historical days only; until must be before today in UTC.")
+
+          print(f"Validated {window_days}-day window: {since} through {until}")
+          PY
+
+      - name: Validate Azure configuration
+        shell: bash
+        env:
+          AZURE_ETL_CLIENT_ID: ${{ secrets.AZURE_ETL_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+        run: |
+          set -euo pipefail
+          for name in \
+            AZURE_ETL_CLIENT_ID \
+            AZURE_TENANT_ID \
+            AZURE_SUBSCRIPTION_ID \
+            AZURE_RESOURCE_GROUP \
+            AZURE_JOB_NAME
+          do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing required GitHub environment value: ${name}" >&2
+              exit 1
+            fi
+          done
+
+      - name: Sign in to Azure with OIDC
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ secrets.AZURE_ETL_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Container Apps CLI extension
+        run: az extension add --name containerapp --upgrade
+
+      - name: Prepare one-time execution template
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+        run: |
+          set -euo pipefail
+          az containerapp job show \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_JOB_NAME}" \
+            --query properties.template \
+            --output json > current-template.json
+
+          container_count="$(jq '.containers | length' current-template.json)"
+          if [[ "${container_count}" != "1" ]]; then
+            echo "Expected exactly one job container; found ${container_count}." >&2
+            exit 1
+          fi
+
+          image="$(jq -r '.containers[0].image' current-template.json)"
+          if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
+            echo "The job image must be pinned to an immutable SHA-256 digest." >&2
+            exit 1
+          fi
+
+          jq \
+            --arg since "${SINCE}" \
+            --arg until "${UNTIL}" \
+            '.containers[0].args = ["--since", $since, "--until", $until]' \
+            current-template.json > execution-template.yaml
+
+      - name: Start ETL execution
+        id: execution
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+        run: |
+          set -euo pipefail
+          execution_name="$(
+            az containerapp job start \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --name "${AZURE_JOB_NAME}" \
+              --yaml execution-template.yaml \
+              --query name \
+              --output tsv
+          )"
+
+          if [[ -z "${execution_name}" ]]; then
+            echo "Azure did not return an execution name." >&2
+            exit 1
+          fi
+
+          echo "name=${execution_name}" >> "${GITHUB_OUTPUT}"
+          echo "Started ${execution_name}"
+
+      - name: Wait for ETL result
+        shell: bash
+        env:
+          AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+          AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
+          EXECUTION_NAME: ${{ steps.execution.outputs.name }}
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+        run: |
+          set -euo pipefail
+          deadline=$((SECONDS + 1800))
+          status="Pending"
+
+          while (( SECONDS < deadline )); do
+            status="$(
+              az containerapp job execution show \
+                --resource-group "${AZURE_RESOURCE_GROUP}" \
+                --name "${AZURE_JOB_NAME}" \
+                --job-execution-name "${EXECUTION_NAME}" \
+                --query properties.status \
+                --output tsv 2>/dev/null || true
+            )"
+
+            case "${status}" in
+              Succeeded)
+                break
+                ;;
+              Failed|Stopped|Degraded)
+                break
+                ;;
+              *)
+                sleep 10
+                ;;
+            esac
+          done
+
+          {
+            echo "### TenderScope ETL dev"
+            echo "- Date window: \`${SINCE}\` through \`${UNTIL}\`"
+            echo "- Execution: \`${EXECUTION_NAME}\`"
+            echo "- Status: \`${status:-Timed out}\`"
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          if [[ "${status}" != "Succeeded" ]]; then
+            echo "ETL execution ended with status: ${status:-Timed out}" >&2
+            exit 1
+          fi
+
+      - name: Sign out from Azure
+        if: always()
+        run: az logout

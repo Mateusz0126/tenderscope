@@ -5,7 +5,7 @@ TenderScope's dev infrastructure is described with Bicep so it can be reviewed, 
 ## Files
 
 - `main.bicep` creates the resource group, least-privilege deployment role and platform module.
-- `modules/platform.bicep` defines ACR, ADLS Gen2, Log Analytics, Container Apps, both managed identities, OIDC federation and scoped role assignments.
+- `modules/platform.bicep` defines ACR, ADLS Gen2, Log Analytics, Container Apps, the runtime/deployment/runner identities, OIDC federation and scoped role assignments.
 - `main.dev.bicepparam` records the current dev resource names and immutable image digest.
 - `budget.bicep` is an optional, standalone resource-group budget. It is never deployed automatically.
 
@@ -17,7 +17,10 @@ The committed parameter file contains resource identifiers, not passwords. The b
 - Deploying infrastructure does not start the ETL job.
 - GitHub's deployment identity can push an image and update only the existing job.
 - The deployment identity cannot start or delete the job, read job secrets or access ADLS data.
+- The runner identity can read and start only the existing job and monitor its executions. It cannot update, delete or stop the job, list secrets, push images or access ADLS directly.
 - The runtime identity can pull from ACR and write only to the `bronze` and `silver` containers.
+
+Azure permits callers with the job start action to supply a one-time execution template. The runner identity is therefore protected by the immutable GitHub environment OIDC subject, `main`-only workflow execution and manual `dev` approval in addition to its job-scoped custom role.
 
 ## Validate locally
 

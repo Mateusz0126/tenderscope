@@ -4,7 +4,7 @@
 
 TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, and validates data quality with DuckDB.
 
-> **Project status:** Working Bronze → Silver pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, an approval-gated Azure deployment workflow, and a successful reviewed cloud data run. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
+> **Project status:** Working Bronze → Silver pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, approval-gated Azure deployment and manual ETL workflows, and successful reviewed cloud data runs. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
 
 ## Architecture
 
@@ -243,6 +243,7 @@ Azure resource definitions, adoption guidance and the optional project budget ar
 - [x] Deploy manual cloud execution with managed identity and verify an ADLS run
 - [x] Describe the Azure platform and cost guardrails with Bicep
 - [x] Add controlled incremental date windows while keeping execution manual
+- [x] Add an approval-gated manual GitHub workflow for bounded ETL date windows
 - [ ] Persist a watermark only after a complete, quality-gated run
 - [ ] Build Gold analytical models and procurement KPIs
 - [ ] Add dashboard and operational monitoring

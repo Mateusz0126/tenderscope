@@ -19,6 +19,7 @@ param names object
 param roleAssignmentNames object = {}
 
 var deployerRoleDefinitionName = '50eca956-3a91-43c3-ab49-972bc9212801'
+var jobRunnerRoleDefinitionName = '103931b6-d031-4b5a-8e0e-2e5661c00019'
 
 resource resourceGroup 'Microsoft.Resources/resourceGroups@2024-03-01' = {
   name: resourceGroupName
@@ -53,6 +54,31 @@ resource jobDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = 
   }
 }
 
+resource jobRunnerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
+  name: jobRunnerRoleDefinitionName
+  properties: {
+    roleName: 'TenderScope Container Apps Job Runner'
+    description: 'Read and start only the TenderScope dev Container Apps Job and monitor its executions.'
+    type: 'CustomRole'
+    assignableScopes: [
+      subscription().id
+    ]
+    permissions: [
+      {
+        actions: [
+          'Microsoft.App/jobs/read'
+          'Microsoft.App/jobs/start/action'
+          'Microsoft.App/jobs/executions/read'
+          'Microsoft.App/jobs/execution/read'
+        ]
+        notActions: []
+        dataActions: []
+        notDataActions: []
+      }
+    ]
+  }
+}
+
 module platform './modules/platform.bicep' = {
   name: 'tenderscope-dev-platform'
   scope: resourceGroup
@@ -61,6 +87,7 @@ module platform './modules/platform.bicep' = {
     initialContainerImage: initialContainerImage
     githubOidcSubject: githubOidcSubject
     jobDeployerRoleDefinitionId: jobDeployerRole.id
+    jobRunnerRoleDefinitionId: jobRunnerRole.id
     names: names
     roleAssignmentNames: roleAssignmentNames
   }
@@ -69,4 +96,5 @@ module platform './modules/platform.bicep' = {
 output resourceGroupId string = resourceGroup.id
 output containerAppJobName string = platform.outputs.containerAppJobName
 output deploymentIdentityName string = platform.outputs.deploymentIdentityName
+output runnerIdentityName string = platform.outputs.runnerIdentityName
 output runtimeIdentityName string = platform.outputs.runtimeIdentityName
