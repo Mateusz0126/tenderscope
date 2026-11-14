@@ -23,5 +23,5 @@ build-backend = "uv_build"
 dev = [
     "duckdb>=2.0.0",
     "pytest>=9.2.0",
-    "ruff>=0.17.3",
+    "ruff>=0.17.4",
 ]
