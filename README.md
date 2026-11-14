@@ -4,7 +4,7 @@
 
 TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, and validates data quality with DuckDB.
 
-> **Project status:** Working local Bronze → Silver pipeline with automated quality checks. Azure Data Lake Storage Gen2 connectivity has been smoke-tested separately. Cloud orchestration, CI/CD, and Gold analytics are planned.
+> **Project status:** Working local Bronze → Silver pipeline with automated quality checks and pull-request CI. Azure Data Lake Storage Gen2 connectivity has been smoke-tested separately. Cloud orchestration, deployment automation, and Gold analytics are planned.
 
 ## Architecture
 
@@ -44,8 +44,8 @@ The current pipeline writes datasets to the local filesystem. Automatic upload t
 | Storage format | JSON (Bronze), Parquet (Silver) |
 | Data quality | DuckDB |
 | Cloud storage (integration in progress) | Azure Data Lake Storage Gen2, Azure Identity |
-| Containerization | Docker (Dockerfile available; runtime verification pending) |
-| Testing and linting | pytest, Ruff |
+| Containerization | Docker |
+| Testing and linting | pytest, Ruff, GitHub Actions |
 
 ## Current data scope
 
@@ -181,7 +181,7 @@ Run the linter:
 uv run ruff check .
 ```
 
-A Dockerfile is included for containerizing the pipeline. Its successful build and runtime behavior have not yet been verified as part of this README update.
+Pull requests and pushes to `main` run Ruff, pytest, and a Docker image build in GitHub Actions. The workflow has read-only repository permissions and does not receive Azure credentials.
 
 ## Roadmap
 
@@ -191,9 +191,9 @@ A Dockerfile is included for containerizing the pipeline. Its successful build a
 - [x] DuckDB Silver quality gate
 - [x] Local pipeline entry point
 - [x] ADLS Gen2 provisioning and standalone read/write/delete smoke test
-- [ ] Verify Docker build and container execution
+- [x] Verify Docker build and container execution
+- [x] Add CI checks (pytest, Ruff, Docker build)
 - [ ] Integrate automated Bronze/Silver upload to ADLS Gen2
-- [ ] Add CI checks (pytest, Ruff, Docker build)
 - [ ] Deploy scheduled cloud execution with managed identity
 - [ ] Build Gold analytical models and procurement KPIs
 - [ ] Add dashboard and operational monitoring
