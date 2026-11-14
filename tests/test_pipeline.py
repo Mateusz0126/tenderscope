@@ -169,3 +169,59 @@ def test_pipeline_does_not_publish_when_quality_fails(
         )
 
     assert publish_calls == []
+
+
+def test_pipeline_accepts_completed_empty_date_window(
+    tmp_path,
+    monkeypatch,
+):
+    monkeypatch.chdir(tmp_path)
+    run_dir = tmp_path / "data/raw/ted_empty"
+
+    def mock_ted(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "notices": [],
+                "iterationNextToken": None,
+                "totalNoticeCount": 0,
+                "timedOut": False,
+            },
+        )
+
+    with httpx.Client(
+        transport=httpx.MockTransport(mock_ted)
+    ) as client:
+        result = run_pipeline(
+            client,
+            run_dir,
+            query=(
+                "publication-date>=20261101 "
+                "AND publication-date<=20261101"
+            ),
+            max_pages=1,
+        )
+
+    assert result["bronze_records"] == 0
+    assert result["silver_metrics"] == {
+        "notices": 0,
+        "cpv_relationships": 0,
+        "buyer_relationships": 0,
+    }
+    assert result["quality_metrics"] == {
+        "bronze_records": 0,
+        "silver_records": 0,
+        "checks_passed": 8,
+    }
+
+    silver_dir = tmp_path / "data/silver/ted_empty"
+
+    assert pl.read_parquet(silver_dir / "notice.parquet").schema == {
+        "notice_id": pl.String,
+        "publication_date": pl.Date,
+        "publication_date_raw": pl.String,
+        "title_pl": pl.String,
+        "title_en": pl.String,
+        "notice_type": pl.String,
+        "xml_url": pl.String,
+    }

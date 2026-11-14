@@ -8,6 +8,24 @@ import polars as pl
 
 from tenderscope.transformations.bronze_reader import load_bronze_run
 
+NOTICE_SCHEMA = {
+    "notice_id": pl.String,
+    "publication_date": pl.Date,
+    "publication_date_raw": pl.String,
+    "title_pl": pl.String,
+    "title_en": pl.String,
+    "notice_type": pl.String,
+    "xml_url": pl.String,
+}
+CPV_SCHEMA = {
+    "notice_id": pl.String,
+    "cpv_code": pl.String,
+}
+BUYER_SCHEMA = {
+    "notice_id": pl.String,
+    "buyer_name": pl.String,
+}
+
 
 def extract_buyers(raw: object) -> list[str]:
     """Extract unique buyer names, preferring Polish."""
@@ -114,13 +132,13 @@ def write_silver(
         target = Path("data/silver") / run_dir.name
         target.mkdir(parents=True, exist_ok=True)
 
-        pl.DataFrame(notice_rows).write_parquet(
+        pl.DataFrame(notice_rows, schema=NOTICE_SCHEMA).write_parquet(
             target / "notice.parquet"
         )
-        pl.DataFrame(cpv_rows).write_parquet(
+        pl.DataFrame(cpv_rows, schema=CPV_SCHEMA).write_parquet(
             target / "notice_cpv.parquet"
         )
-        pl.DataFrame(buyer_rows).write_parquet(
+        pl.DataFrame(buyer_rows, schema=BUYER_SCHEMA).write_parquet(
             target / "notice_buyer.parquet"
         )
 
