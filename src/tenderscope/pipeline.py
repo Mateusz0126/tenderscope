@@ -14,6 +14,7 @@ from tenderscope.ingestion.ted_pages import run_download
 from tenderscope.quality.silver import validate_silver
 from tenderscope.storage.adls import publish_run_to_adls
 from tenderscope.transformations.bronze_reader import load_bronze_run
+from tenderscope.transformations.gold import write_gold
 from tenderscope.transformations.silver import write_silver
 
 
@@ -24,14 +25,14 @@ def run_pipeline(
     query: str | None,
     max_pages: int,
     allow_partial: bool = False,
-    publisher: Callable[[Path, Path], dict[str, object]] | None = None,
+    publisher: Callable[[Path, Path, Path], dict[str, object]] | None = None,
 ) -> dict:
     start_time = time.monotonic()
 
     print("\n=== TENDERSCOPE PIPELINE ===")
 
     # STEP 1: INGESTION
-    print("\n[1/4] TED ingestion")
+    print("\n[1/5] TED ingestion")
 
     run_download(
         client,
@@ -41,7 +42,7 @@ def run_pipeline(
     )
 
     # STEP 2: BRONZE VALIDATION
-    print("\n[2/4] Bronze validation")
+    print("\n[2/5] Bronze validation")
 
     notices = load_bronze_run(
         run_dir,
@@ -51,7 +52,7 @@ def run_pipeline(
     print(f"Bronze records: {len(notices)}")
 
     # STEP 3: SILVER TRANSFORMATION
-    print("\n[3/4] Silver transformation")
+    print("\n[3/5] Silver transformation")
 
     silver_metrics = write_silver(
         run_dir,
@@ -61,19 +62,25 @@ def run_pipeline(
     print("Silver metrics:", silver_metrics)
 
     # STEP 4: SILVER QUALITY
-    print("\n[4/4] Silver quality gate")
+    print("\n[4/5] Silver quality gate")
 
     quality_metrics = validate_silver(
         run_dir,
         allow_partial=allow_partial,
     )
 
+    print("\n[5/5] Gold analytical models")
+    silver_dir = Path("data/silver") / run_dir.name
+    gold_dir = Path("data/gold") / run_dir.name
+    gold_metrics = write_gold(silver_dir, gold_dir)
+
+    print("Gold metrics:", gold_metrics)
+
     storage_metrics = None
 
     if publisher is not None:
-        print("\n[5/5] ADLS publication")
-        silver_dir = Path("data/silver") / run_dir.name
-        storage_metrics = publisher(run_dir, silver_dir)
+        print("\n[6/6] ADLS publication")
+        storage_metrics = publisher(run_dir, silver_dir, gold_dir)
         print("ADLS metrics:", storage_metrics)
 
     duration = round(time.monotonic() - start_time, 2)
@@ -83,6 +90,7 @@ def run_pipeline(
         "bronze_records": len(notices),
         "silver_metrics": silver_metrics,
         "quality_metrics": quality_metrics,
+        "gold_metrics": gold_metrics,
         "storage_metrics": storage_metrics,
         "duration_seconds": duration,
     }
@@ -189,3 +197,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

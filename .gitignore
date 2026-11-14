@@ -24,6 +24,7 @@ htmlcov/
 # Local data
 data/raw/
 data/silver/
+data/gold/
 
 # Locally compiled Bicep output
 infra/*.json
@@ -36,3 +37,4 @@ infra/modules/*.json
 # OS
 .DS_Store
 Thumbs.db
+

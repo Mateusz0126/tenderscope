@@ -14,7 +14,7 @@ The `Deploy dev` workflow:
 6. verifies the configured image;
 7. does **not** start the job.
 
-The job remains intentionally manual after the first successful, quality-gated Bronze and Silver publication to ADLS Gen2. This keeps every data run and its cost under the repository owner's control.
+The job remains intentionally manual after the first successful, quality-gated Bronze, Silver and Gold publication to ADLS Gen2. This keeps every data run and its cost under the repository owner's control.
 
 The separate `Run ETL dev` workflow accepts an inclusive historical date window, waits for the same `dev` approval, starts exactly one execution and waits for its terminal status. It has no schedule.
 
@@ -63,7 +63,7 @@ Its Azure access is limited to:
 
 The custom role can read and update the job. It cannot start or delete the job, list job secrets, modify role assignments, or access ADLS data.
 
-The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image and accesses only the `bronze` and `silver` containers.
+The runtime identity `mi-tenderscope-job-dev` remains separate. It pulls the image and accesses only the `bronze`, `silver` and `gold` containers.
 
 The ETL runner identity `mi-tenderscope-runner-dev` has the custom `TenderScope Container Apps Job Runner` role on this job only. The role contains only job read, execution read and job start actions. It cannot update or delete the job, stop executions, list secrets, modify role assignments, push images or access ADLS directly.
 
@@ -82,3 +82,4 @@ Open **Actions → Run ETL dev → Run workflow** on `main`, then enter `since` 
 - a maximum execution wait of 30 minutes.
 
 Choose the dates deliberately before each run. Until a durable watermark is implemented, TenderScope does not infer or advance the next date automatically. Keep `--allow-partial` disabled for incremental batches so a page limit cannot be mistaken for a completed date window.
+

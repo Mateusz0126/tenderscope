@@ -18,7 +18,7 @@ The committed parameter file contains resource identifiers, not passwords. The b
 - GitHub's deployment identity can push an image and update only the existing job.
 - The deployment identity cannot start or delete the job, read job secrets or access ADLS data.
 - The runner identity can read and start only the existing job and monitor its executions. It cannot update, delete or stop the job, list secrets, push images or access ADLS directly.
-- The runtime identity can pull from ACR and write only to the `bronze` and `silver` containers.
+- The runtime identity can pull from ACR and write only to the `bronze`, `silver` and `gold` containers.
 
 Azure permits callers with the job start action to supply a one-time execution template. The runner identity is therefore protected by the immutable GitHub environment OIDC subject, `main`-only workflow execution and manual `dev` approval in addition to its job-scoped custom role.
 
@@ -76,3 +76,4 @@ Replace `what-if` with `create` only after reviewing the preview. Azure budgets 
 - ACR uses the Basic tier and storage uses Standard LRS.
 - No paid analytics database, scheduler or dashboard resource is provisioned.
 - Review Azure Cost Analysis after deployments because cost data can arrive with a delay.
+
