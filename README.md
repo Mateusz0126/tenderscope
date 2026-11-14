@@ -4,7 +4,7 @@
 
 TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, and validates data quality with DuckDB.
 
-> **Project status:** Working local Bronze → Silver pipeline with automated quality checks and pull-request CI. Azure Data Lake Storage Gen2 connectivity has been smoke-tested separately. Cloud orchestration, deployment automation, and Gold analytics are planned.
+> **Project status:** Working Bronze → Silver pipeline with automated quality checks, optional ADLS Gen2 publication, pull-request CI, and an approval-gated Azure deployment workflow. The Container Apps Job remains manual until its first cloud data run is reviewed.
 
 ## Architecture
 
@@ -25,13 +25,16 @@ Silver (Parquet)
          | DuckDB quality gate (8 checks)
          v
 Validated Silver datasets
-
+         |
+         | publish only after the quality gate passes
+         v
 Azure Data Lake Storage Gen2
-  ├── bronze/   (provisioned; connectivity verified)
-  └── silver/   (provisioned; connectivity verified)
+  ├── bronze/runs/<run_id>/
+  └── silver/runs/<run_id>/
+      └── _SUCCESS.json
 ```
 
-The current pipeline writes datasets to the local filesystem. Automatic upload to ADLS Gen2 is **not yet integrated** into the pipeline.
+The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze and Silver files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written last, so consumers can distinguish complete runs from interrupted uploads.
 
 ## Tech stack
 
@@ -43,7 +46,7 @@ The current pipeline writes datasets to the local filesystem. Automatic upload t
 | Data transformation | Polars |
 | Storage format | JSON (Bronze), Parquet (Silver) |
 | Data quality | DuckDB |
-| Cloud storage (integration in progress) | Azure Data Lake Storage Gen2, Azure Identity |
+| Cloud storage | Azure Data Lake Storage Gen2, Azure Identity |
 | Containerization | Docker |
 | Testing and linting | pytest, Ruff, GitHub Actions |
 
@@ -71,6 +74,8 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 │   │   └── silver.py           # Normalize notices and write Parquet
 │   ├── quality/
 │   │   └── silver.py           # DuckDB data-quality gate
+│   ├── storage/
+│   │   └── adls.py             # Idempotent Bronze/Silver publication
 │   └── pipeline.py             # End-to-end orchestration
 ├── scripts/
 │   └── smoke_adls.py           # Standalone ADLS connectivity smoke test
@@ -100,6 +105,15 @@ uv sync
 ```bash
 uv run python -m tenderscope.pipeline --max-pages 2 --allow-partial
 ```
+
+To publish a validated run to ADLS Gen2, set the storage account name before starting the same command:
+
+```powershell
+$env:TENDERSCOPE_STORAGE_ACCOUNT = "<storage-account-name>"
+uv run python -m tenderscope.pipeline --max-pages 2 --allow-partial
+```
+
+In Azure Container Apps, `DefaultAzureCredential` uses the job's user-assigned managed identity selected through `AZURE_CLIENT_ID`. No storage key or connection string is required.
 
 The `--allow-partial` flag is needed when the configured page limit is reached before the API's complete result set has been downloaded. It allows the available subset to be transformed and validated. For full extraction, use a sufficiently high `--max-pages` and run without `--allow-partial`.
 
@@ -134,6 +148,17 @@ data/
         ├── notice.parquet
         ├── notice_cpv.parquet
         └── notice_buyer.parquet
+```
+
+With ADLS publication enabled, the same run is uploaded as:
+
+```text
+bronze/runs/ted_<run_id>/manifest.json
+bronze/runs/ted_<run_id>/page_*.json
+silver/runs/ted_<run_id>/notice.parquet
+silver/runs/ted_<run_id>/notice_cpv.parquet
+silver/runs/ted_<run_id>/notice_buyer.parquet
+silver/runs/ted_<run_id>/_SUCCESS.json
 ```
 
 | Silver dataset | Grain | Example fields |
@@ -195,7 +220,7 @@ Dev deployments use a separate, manually approved OIDC workflow. See [Supervised
 - [x] ADLS Gen2 provisioning and standalone read/write/delete smoke test
 - [x] Verify Docker build and container execution
 - [x] Add CI checks (pytest, Ruff, Docker build)
-- [ ] Integrate automated Bronze/Silver upload to ADLS Gen2
+- [x] Integrate quality-gated Bronze/Silver upload to ADLS Gen2
 - [ ] Deploy scheduled cloud execution with managed identity
 - [ ] Build Gold analytical models and procurement KPIs
 - [ ] Add dashboard and operational monitoring

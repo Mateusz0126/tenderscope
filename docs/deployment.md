@@ -14,7 +14,7 @@ The `Deploy dev` workflow:
 6. verifies the configured image;
 7. does **not** start the job.
 
-The job remains manual until the pipeline writes Bronze and Silver outputs to ADLS Gen2 and a cloud smoke run has been reviewed.
+The job remains manual until the first quality-gated Bronze and Silver publication to ADLS Gen2 has been reviewed.
 
 ## GitHub environment
 
