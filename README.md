@@ -1,10 +1,32 @@
 # TenderScope
 
+[![CI](https://github.com/Mateusz0126/tenderscope/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Mateusz0126/tenderscope/actions/workflows/ci.yml)
+
 **An end-to-end Data Engineering project for exploring European public procurement notices.**
 
-TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, validates data quality with DuckDB, and builds run-level Gold procurement KPIs with a static HTML report.
+TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, validates data quality with DuckDB, and builds run-level Gold procurement KPIs with a self-contained HTML report.
 
-> **Project status:** Working Bronze → Silver → Gold pipeline with automated quality checks, ADLS Gen2 publication, pull-request CI, approval-gated Azure deployment and manual ETL workflows, and successful reviewed cloud data runs. The Container Apps Job remains intentionally manual to keep execution and cost under owner control.
+> **Status:** portfolio-ready, production-oriented MVP. The complete Bronze → Silver → Gold path has been verified in Azure. Deployments and data runs are manual and approval-gated by design. See the [current status and maturity assessment](docs/project-status.md).
+
+## What this project demonstrates
+
+| Capability | Implementation |
+| --- | --- |
+| Resilient ingestion | TED pagination, retry/backoff, atomic checkpoints and resume |
+| Analytical modeling | Normalized Parquet datasets and run-level procurement KPIs |
+| Data quality | Eight DuckDB checks block invalid publication |
+| Cloud engineering | ADLS Gen2, ACR and Container Apps Jobs defined with Bicep |
+| Secure delivery | GitHub Actions OIDC, separate managed identities and scoped roles |
+| Operational control | Manual date windows, protected `dev` approvals and immutable image digests |
+| Cost awareness | Consumption execution, no scheduler, no hosted dashboard and bounded runs |
+
+## Project documentation
+
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Five-to-seven minute demonstration](docs/demo.md)
+- [Current status, evidence, gaps and maturity](docs/project-status.md)
+- [Supervised deployment and ETL execution](docs/deployment.md)
+- [Azure infrastructure and cost posture](infra/README.md)
 
 ## Architecture
 
@@ -35,11 +57,13 @@ Gold (run-level KPIs + static HTML report)
 Azure Data Lake Storage Gen2
   ├── bronze/runs/<run_id>/
   ├── silver/runs/<run_id>/
-      └── _SUCCESS.json
+  │   └── _SUCCESS.json
   └── gold/runs/<run_id>/
 ```
 
-The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze and Silver files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written last, so consumers can distinguish complete runs from interrupted uploads.
+The pipeline always writes and validates local working files first. When `TENDERSCOPE_STORAGE_ACCOUNT` is configured, it then uploads Bronze, Silver and Gold files to ADLS Gen2. The Silver `_SUCCESS.json` marker is written last, after every layer has been uploaded, so consumers can distinguish complete runs from interrupted publications.
+
+The complete component and identity flow is documented in [Architecture and trust boundaries](docs/architecture.md).
 
 ## Tech stack
 
@@ -67,6 +91,18 @@ The default query selects notices where:
 
 The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code uses TED's iteration-based pagination with a page size of **50 notices**. By default, it searches the last **45 days** and processes at most **2 pages**, so a default run is a bounded sample, **not necessarily a complete extract** of all matching notices.
 
+## Verified cloud run
+
+On **2026-11-14**, the protected workflow processed the completed historical day **2026-11-11** after an explicit `dev` approval. The run published all three layers and produced:
+
+- 16 notices;
+- 13 unique buyers;
+- 39 unique CPV codes;
+- 3 notice types;
+- 3 Silver Parquet datasets, 4 Gold Parquet summaries, `summary.json` and `report.html`.
+
+Evidence: [successful ETL workflow](https://github.com/Mateusz0126/tenderscope/actions/runs/43640055844) and [Gold implementation PR](https://github.com/Mateusz0126/tenderscope/pull/11). The batch is evidence that the bounded workflow works end to end; it is not a claim that the project continuously processes every TED notice.
+
 ## Repository structure
 
 ```text
@@ -82,10 +118,15 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 │   ├── quality/
 │   │   └── silver.py           # DuckDB data-quality gate
 │   ├── storage/
-│   │   └── adls.py             # Idempotent Bronze/Silver publication
+│   │   └── adls.py             # Idempotent Bronze/Silver/Gold publication
 │   └── pipeline.py             # End-to-end orchestration
 ├── scripts/
 │   └── smoke_adls.py           # Standalone ADLS connectivity smoke test
+├── docs/
+│   ├── architecture.md         # Components, identities and failure semantics
+│   ├── demo.md                 # Short portfolio walkthrough
+│   ├── project-status.md       # Evidence, gaps and maturity assessment
+│   └── deployment.md           # Supervised OIDC deployment and execution
 ├── infra/                      # Reproducible Azure Bicep templates
 ├── Dockerfile
 ├── .dockerignore
@@ -251,6 +292,8 @@ Dev deployments use a separate, manually approved OIDC workflow. See [Supervised
 
 Azure resource definitions, adoption guidance and the optional project budget are documented in [Azure infrastructure](infra/README.md). Infrastructure and budget deployments are previewed with Azure `what-if` and are never applied by CI.
 
+For a portfolio walkthrough, use the [short demonstration script](docs/demo.md). It shows the problem, architecture, CI, approval gate, cloud run and analytical result without exposing credentials.
+
 ## Roadmap
 
 - [x] TED API ingestion with retries and iterative pagination
@@ -261,7 +304,7 @@ Azure resource definitions, adoption guidance and the optional project budget ar
 - [x] ADLS Gen2 provisioning and standalone read/write/delete smoke test
 - [x] Verify Docker build and container execution
 - [x] Add CI checks (pytest, Ruff, Docker build)
-- [x] Integrate quality-gated Bronze/Silver upload to ADLS Gen2
+- [x] Integrate quality-gated Bronze/Silver/Gold upload to ADLS Gen2
 - [x] Deploy manual cloud execution with managed identity and verify an ADLS run
 - [x] Describe the Azure platform and cost guardrails with Bicep
 - [x] Add controlled incremental date windows while keeping execution manual
@@ -270,6 +313,8 @@ Azure resource definitions, adoption guidance and the optional project budget ar
 - [x] Build run-level Gold analytical models and procurement KPIs
 - [x] Add a zero-hosting-cost static dashboard report
 - [ ] Add operational monitoring
+
+The unchecked items are deliberate production gaps, not hidden features. Their impact and priority are explained in [Current status and maturity](docs/project-status.md).
 
 ## Why this project?
 
