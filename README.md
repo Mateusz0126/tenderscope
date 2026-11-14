@@ -59,7 +59,7 @@ The default query selects notices where:
 - Publication date is within the **last 45 days**.
 - Results are sorted by publication date, newest first.
 
-The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code uses TED's iteration-based pagination with a page size of **50 notices**. By default, the pipeline processes at most **2 pages**, so a default run is a bounded sample, **not necessarily a complete extract** of all matching notices.
+The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code uses TED's iteration-based pagination with a page size of **50 notices**. By default, it searches the last **45 days** and processes at most **2 pages**, so a default run is a bounded sample, **not necessarily a complete extract** of all matching notices.
 
 ## Repository structure
 
@@ -106,6 +106,21 @@ uv sync
 ```bash
 uv run python -m tenderscope.pipeline --max-pages 2 --allow-partial
 ```
+
+For a controlled incremental batch, provide an inclusive publication-date window:
+
+```bash
+uv run python -m tenderscope.pipeline \
+  --since 2026-11-02 \
+  --until 2026-11-02 \
+  --max-pages 2
+```
+
+The pipeline rejects reversed windows and records the exact query in the Bronze manifest. Date bounds cannot be changed while resuming an existing run, which prevents a checkpoint from silently switching to a different data scope.
+
+Do not use `--allow-partial` for a batch that will advance a future watermark. If the daily window exceeds the page limit, increase `--max-pages` or resume the same run so the window becomes complete before publication.
+
+A completed window with zero matching notices is a valid run. TenderScope writes typed, empty Silver Parquet files and still executes all quality checks, so an empty day does not break future incremental processing.
 
 To publish a validated run to ADLS Gen2, set the storage account name before starting the same command:
 
@@ -179,6 +194,7 @@ silver/runs/ted_<run_id>/_SUCCESS.json
 - A per-run manifest with page counts, timestamps and resume state.
 - Bronze record-count and page-sequence validation.
 - Protection against silently accepting incomplete runs unless explicitly allowed.
+- Inclusive `--since`/`--until` windows for controlled incremental batches.
 
 **Silver quality gate (8 checks)**
 
@@ -226,7 +242,8 @@ Azure resource definitions, adoption guidance and the optional project budget ar
 - [x] Integrate quality-gated Bronze/Silver upload to ADLS Gen2
 - [x] Deploy manual cloud execution with managed identity and verify an ADLS run
 - [x] Describe the Azure platform and cost guardrails with Bicep
-- [ ] Add incremental ingestion while keeping execution manual
+- [x] Add controlled incremental date windows while keeping execution manual
+- [ ] Persist a watermark only after a complete, quality-gated run
 - [ ] Build Gold analytical models and procurement KPIs
 - [ ] Add dashboard and operational monitoring
 

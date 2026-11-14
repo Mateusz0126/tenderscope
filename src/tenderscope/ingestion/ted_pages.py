@@ -3,7 +3,7 @@ import argparse
 import json
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import httpx
@@ -12,6 +12,7 @@ from tenderscope.ingestion.ted_api import (
     SEARCH_FIELDS,
     TED_URL,
     build_query,
+    resolve_date_window,
 )
 
 PAGE_SIZE = 50
@@ -237,14 +238,30 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--resume", type=Path)
     parser.add_argument("--max-pages", type=int, default=MAX_PAGES)
+    parser.add_argument("--since", type=date.fromisoformat)
+    parser.add_argument("--until", type=date.fromisoformat)
     args = parser.parse_args()
+
+    since_arg = args.since
+    until_arg = args.until
+
+    if args.resume and (since_arg is not None or until_arg is not None):
+        parser.error("--since/--until cannot be used with --resume")
 
     if args.resume is not None:
         run_dir = args.resume
         query = None
     else:
-        since = datetime.now(UTC).date() - timedelta(days=45)
-        query = build_query(since)
+        try:
+            since, until = resolve_date_window(
+                since=since_arg,
+                until=until_arg,
+                today=datetime.now(UTC).date(),
+            )
+        except ValueError as error:
+            parser.error(str(error))
+
+        query = build_query(since, until)
 
         run_id = datetime.now(UTC).strftime(
             "%Y%m%dT%H%M%S%fZ"

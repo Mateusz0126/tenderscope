@@ -15,19 +15,44 @@ SEARCH_FIELDS = [
     "notice-type",
 ]
 
+DEFAULT_LOOKBACK_DAYS = 45
 
 
-def build_query(since: date) -> str:
+def resolve_date_window(
+    *,
+    since: date | None,
+    until: date | None,
+    today: date,
+) -> tuple[date, date | None]:
+    resolved_since = since or today - timedelta(days=DEFAULT_LOOKBACK_DAYS)
+
+    if until is not None and resolved_since > until:
+        raise ValueError("since date must not be after until date")
+
+    return resolved_since, until
+
+
+def build_query(since: date, until: date | None = None) -> str:
+    if until is not None and since > until:
+        raise ValueError("since date must not be after until date")
+
+    date_filter = f"publication-date>={since:%Y%m%d}"
+
+    if until is not None:
+        date_filter += f" AND publication-date<={until:%Y%m%d}"
+
     return (
         "buyer-country=POL "
         "AND classification-cpv=72* "
-        f"AND publication-date>={since:%Y%m%d} "
+        f"AND {date_filter} "
         "SORT BY publication-date DESC"
     )
 
 
 def main() -> None:
-    since = datetime.now(UTC).date() - timedelta(days=45)
+    since = datetime.now(UTC).date() - timedelta(
+        days=DEFAULT_LOOKBACK_DAYS
+    )
 
     payload = {
             "query": build_query(since),

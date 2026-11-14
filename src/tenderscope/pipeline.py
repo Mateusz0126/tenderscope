@@ -3,13 +3,13 @@ import argparse
 import os
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
 
 import httpx
 
-from tenderscope.ingestion.ted_api import build_query
+from tenderscope.ingestion.ted_api import build_query, resolve_date_window
 from tenderscope.ingestion.ted_pages import run_download
 from tenderscope.quality.silver import validate_silver
 from tenderscope.storage.adls import publish_run_to_adls
@@ -115,6 +115,20 @@ def main() -> None:
     )
 
     parser.add_argument(
+        "--since",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="Inclusive publication-date lower bound.",
+    )
+
+    parser.add_argument(
+        "--until",
+        type=date.fromisoformat,
+        metavar="YYYY-MM-DD",
+        help="Inclusive publication-date upper bound.",
+    )
+
+    parser.add_argument(
         "--storage-account",
         default=os.environ.get("TENDERSCOPE_STORAGE_ACCOUNT"),
     )
@@ -126,16 +140,26 @@ def main() -> None:
 
     args = parser.parse_args()
 
+    since_arg = args.since
+    until_arg = args.until
+
+    if args.resume and (since_arg is not None or until_arg is not None):
+        parser.error("--since/--until cannot be used with --resume")
+
     if args.resume:
         run_dir = args.resume
         query = None
     else:
-        since = (
-            datetime.now(UTC).date()
-            - timedelta(days=45)
-        )
+        try:
+            since, until = resolve_date_window(
+                since=since_arg,
+                until=until_arg,
+                today=datetime.now(UTC).date(),
+            )
+        except ValueError as error:
+            parser.error(str(error))
 
-        query = build_query(since)
+        query = build_query(since, until)
 
         run_id = datetime.now(UTC).strftime(
             "%Y%m%dT%H%M%S%fZ"

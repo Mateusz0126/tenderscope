@@ -11,4 +11,5 @@ COPY . .
 
 RUN uv sync --locked --no-dev --no-editable
 
-CMD ["/app/.venv/bin/python", "-m", "tenderscope.pipeline", "--max-pages", "2", "--allow-partial"]
+ENTRYPOINT ["/app/.venv/bin/python", "-m", "tenderscope.pipeline"]
+CMD ["--max-pages", "2", "--allow-partial"]
