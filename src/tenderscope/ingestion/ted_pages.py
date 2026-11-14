@@ -126,6 +126,82 @@ def save_manifest(path: Path, manifest: dict) -> None:
     atomic_write(path, content)
 
 
+def validate_manifest(manifest: dict, query: str | None) -> None:
+    if query is not None and query != manifest["query"]:
+        raise ValueError("Query differs from existing run")
+
+    if (
+        manifest["page_size"] != PAGE_SIZE
+        or manifest["fields"] != SEARCH_FIELDS
+    ):
+        raise ValueError("Incompatible ingestion configuration")
+
+
+def prepare_manifest(path: Path, query: str | None) -> dict:
+    if path.exists():
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        validate_manifest(manifest, query)
+        return manifest
+
+    if query is None:
+        raise ValueError("Query required for a new run")
+
+    manifest = {
+        "query": query,
+        "fields": SEARCH_FIELDS,
+        "page_size": PAGE_SIZE,
+        "pagination_mode": "ITERATION",
+        "status": "partial",
+        "next_token": None,
+        "pages": [],
+    }
+    save_manifest(path, manifest)
+    return manifest
+
+
+def persist_page(
+    run_dir: Path,
+    manifest_path: Path,
+    manifest: dict,
+    *,
+    page_number: int,
+    content: bytes,
+    count: int,
+    next_token: str | None,
+) -> None:
+    filename = f"page_{page_number:03d}.json"
+    atomic_write(run_dir / filename, content)
+    manifest["pages"].append(
+        {
+            "file": filename,
+            "record_count": count,
+            "fetched_at_utc": datetime.now(UTC).isoformat(),
+        }
+    )
+    manifest["next_token"] = next_token
+    manifest["status"] = (
+        "completed" if count == 0 or not next_token else "partial"
+    )
+    save_manifest(manifest_path, manifest)
+
+
+def validate_iteration_end(
+    *,
+    downloaded_before: int,
+    count: int,
+    total: int | None,
+    next_token: str | None,
+) -> None:
+    if (
+        not next_token
+        and total is not None
+        and downloaded_before + count < total
+    ):
+        raise RuntimeError(
+            "Iteration ended before all notices were downloaded"
+        )
+
+
 def run_download(
     client: httpx.Client,
     run_dir: Path,
@@ -138,42 +214,14 @@ def run_download(
 
     run_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = run_dir / "manifest.json"
+    manifest = prepare_manifest(manifest_path, query)
 
-    if manifest_path.exists():
-        manifest = json.loads(
-            manifest_path.read_text(encoding="utf-8")
-        )
+    if manifest["status"] == "completed":
+        print("Run already completed.")
+        return
 
-        if query is not None and query != manifest["query"]:
-            raise ValueError("Query differs from existing run")
-
-        if (
-            manifest["page_size"] != PAGE_SIZE
-            or manifest["fields"] != SEARCH_FIELDS
-        ):
-            raise ValueError("Incompatible ingestion configuration")
-
-        if manifest["status"] == "completed":
-            print("Run already completed.")
-            return
-
+    if manifest["pages"]:
         print("Resuming existing run.")
-
-    else:
-        if query is None:
-            raise ValueError("Query required for a new run")
-
-        manifest = {
-            "query": query,
-            "fields": SEARCH_FIELDS,
-            "page_size": PAGE_SIZE,
-            "pagination_mode": "ITERATION",
-            "status": "partial",
-            "next_token": None,
-            "pages": [],
-        }
-
-        save_manifest(manifest_path, manifest)
 
     start_page = len(manifest["pages"]) + 1
 
@@ -198,34 +246,21 @@ def run_download(
             for page in manifest["pages"]
         )
 
-        if (
-            not next_token
-            and total is not None
-            and downloaded_before + count < total
-        ):
-            raise RuntimeError(
-                "Iteration ended before all notices were downloaded"
-            )
-
-        filename = f"page_{page_number:03d}.json"
-        atomic_write(run_dir / filename, content)
-
-        manifest["pages"].append(
-            {
-                "file": filename,
-                "record_count": count,
-                "fetched_at_utc": datetime.now(UTC).isoformat(),
-            }
+        validate_iteration_end(
+            downloaded_before=downloaded_before,
+            count=count,
+            total=total,
+            next_token=next_token,
         )
-
-        manifest["next_token"] = next_token
-        manifest["status"] = (
-            "completed"
-            if count == 0 or not next_token
-            else "partial"
+        persist_page(
+            run_dir,
+            manifest_path,
+            manifest,
+            page_number=page_number,
+            content=content,
+            count=count,
+            next_token=next_token,
         )
-
-        save_manifest(manifest_path, manifest)
 
         print(f"Page {page_number}: {count} notices")
         print(f"Total downloaded: {downloaded_before + count}")

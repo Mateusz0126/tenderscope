@@ -3,6 +3,7 @@ import argparse
 import os
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from functools import partial
 from pathlib import Path
@@ -14,6 +15,7 @@ from tenderscope.ingestion.ted_pages import run_download
 from tenderscope.orchestration.state import (
     DEFAULT_STATE_STREAM,
     DateWindow,
+    StateSnapshot,
     resolve_incremental_window,
 )
 from tenderscope.quality.silver import validate_silver
@@ -26,6 +28,19 @@ from tenderscope.transformations.bronze_reader import load_bronze_run
 from tenderscope.transformations.gold import write_gold
 from tenderscope.transformations.silver import write_silver
 
+Publisher = Callable[[Path, Path, Path], dict[str, object]]
+StateCommitter = Callable[[str], dict[str, object]]
+
+
+@dataclass(frozen=True)
+class ExecutionPlan:
+    run_dir: Path
+    query: str | None
+    max_pages: int
+    allow_partial: bool
+    publisher: Publisher | None
+    state_committer: StateCommitter | None
+
 
 def run_pipeline(
     client: httpx.Client,
@@ -34,8 +49,8 @@ def run_pipeline(
     query: str | None,
     max_pages: int,
     allow_partial: bool = False,
-    publisher: Callable[[Path, Path, Path], dict[str, object]] | None = None,
-    state_committer: Callable[[str], dict[str, object]] | None = None,
+    publisher: Publisher | None = None,
+    state_committer: StateCommitter | None = None,
 ) -> dict:
     if state_committer is not None and publisher is None:
         raise ValueError("Durable state requires successful ADLS publication")
@@ -133,7 +148,7 @@ def run_pipeline(
     return results
 
 
-def main() -> None:
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
@@ -199,12 +214,14 @@ def main() -> None:
         default=os.environ.get("TENDERSCOPE_STATE_PREFIX", "state"),
     )
 
-    args = parser.parse_args()
+    return parser
 
-    since_arg = args.since
-    until_arg = args.until
 
-    if args.resume and (since_arg is not None or until_arg is not None):
+def validate_arguments(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> None:
+    if args.resume and (args.since is not None or args.until is not None):
         parser.error("--since/--until cannot be used with --resume")
 
     if args.resume and args.state_policy != "off":
@@ -216,53 +233,72 @@ def main() -> None:
     if args.state_policy == "enforce" and args.allow_partial:
         parser.error("Durable state cannot advance a partial ingestion")
 
+
+def resolve_new_run(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    *,
+    now: datetime,
+) -> tuple[Path, str, StateSnapshot | None, DateWindow | None]:
     state_snapshot = None
-    state_window: DateWindow | None = None
+    state_window = None
+
+    if args.state_policy == "enforce":
+        state_snapshot = read_pipeline_state(
+            args.storage_account,
+            args.state_stream,
+            prefix=args.state_prefix,
+        )
+
+        try:
+            state_window = resolve_incremental_window(
+                snapshot=state_snapshot,
+                requested_since=args.since,
+                requested_until=args.until,
+                today=now.date(),
+            )
+        except ValueError as error:
+            parser.error(str(error))
+
+        since, until = state_window.since, state_window.until
+    else:
+        try:
+            since, until = resolve_date_window(
+                since=args.since,
+                until=args.until,
+                today=now.date(),
+            )
+        except ValueError as error:
+            parser.error(str(error))
+
+    query = build_query(since, until)
+    run_id = now.strftime("%Y%m%dT%H%M%S%fZ")
+    run_dir = Path("data/raw") / f"ted_{run_id}"
+    return run_dir, query, state_snapshot, state_window
+
+
+def build_execution_plan(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+    *,
+    now: datetime,
+) -> ExecutionPlan:
+    validate_arguments(args, parser)
+
+    state_snapshot = None
+    state_window = None
 
     if args.resume:
         run_dir = args.resume
         query = None
     else:
-        today = datetime.now(UTC).date()
-
-        if args.state_policy == "enforce":
-            state_snapshot = read_pipeline_state(
-                args.storage_account,
-                args.state_stream,
-                prefix=args.state_prefix,
-            )
-
-            try:
-                state_window = resolve_incremental_window(
-                    snapshot=state_snapshot,
-                    requested_since=since_arg,
-                    requested_until=until_arg,
-                    today=today,
-                )
-            except ValueError as error:
-                parser.error(str(error))
-
-            since, until = state_window.since, state_window.until
-        else:
-            try:
-                since, until = resolve_date_window(
-                    since=since_arg,
-                    until=until_arg,
-                    today=today,
-                )
-            except ValueError as error:
-                parser.error(str(error))
-
-        query = build_query(since, until)
-
-        run_id = datetime.now(UTC).strftime(
-            "%Y%m%dT%H%M%S%fZ"
+        run_dir, query, state_snapshot, state_window = resolve_new_run(
+            args,
+            parser,
+            now=now,
         )
 
-        run_dir = Path("data/raw") / f"ted_{run_id}"
-
     publisher = None
-    state_committer = None
 
     if args.storage_account:
         publisher = partial(
@@ -270,6 +306,8 @@ def main() -> None:
             args.storage_account,
             prefix=args.storage_prefix,
         )
+
+    state_committer = None
 
     if state_snapshot is not None and state_window is not None:
         state_committer = partial(
@@ -281,15 +319,34 @@ def main() -> None:
             prefix=args.state_prefix,
         )
 
+    return ExecutionPlan(
+        run_dir=run_dir,
+        query=query,
+        max_pages=args.max_pages,
+        allow_partial=args.allow_partial,
+        publisher=publisher,
+        state_committer=state_committer,
+    )
+
+
+def main() -> None:
+    parser = create_parser()
+    args = parser.parse_args()
+    plan = build_execution_plan(
+        args,
+        parser,
+        now=datetime.now(UTC),
+    )
+
     with httpx.Client(timeout=30.0) as client:
         run_pipeline(
             client,
-            run_dir,
-            query=query,
-            max_pages=args.max_pages,
-            allow_partial=args.allow_partial,
-            publisher=publisher,
-            state_committer=state_committer,
+            plan.run_dir,
+            query=plan.query,
+            max_pages=plan.max_pages,
+            allow_partial=plan.allow_partial,
+            publisher=plan.publisher,
+            state_committer=plan.state_committer,
         )
 
 
