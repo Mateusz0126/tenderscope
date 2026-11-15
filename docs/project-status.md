@@ -4,7 +4,7 @@ Last verified: **2026-11-14**
 
 ## Executive assessment
 
-TenderScope is a **production-oriented portfolio MVP**. It is materially above a tutorial project: the pipeline handles retries and resumability, enforces data-quality gates, publishes three analytical layers, provisions Azure with Bicep, and uses approval-gated OIDC workflows with scoped identities.
+TenderScope is a **working portfolio data platform**. Unlike a tutorial-only pipeline, it has retries and resumability, blocking data-quality checks, three analytical layers, Bicep infrastructure, approval-gated OIDC workflows and scoped identities.
 
 It is not yet a production data product. It intentionally lacks automatic scheduling and still needs proactive monitoring, retention policies and formal schema evolution. Durable orchestration state is implemented with a versioned contract and optimistic concurrency; its first dev rollout remains to be verified after the infrastructure change is approved.
 

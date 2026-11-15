@@ -73,6 +73,6 @@ For the verified 2026-11-11 batch, call out 16 notices, 13 unique buyers, 39 uni
 
 ## 7. Finish with trade-offs
 
-> This is a production-oriented portfolio MVP, not a production service. It has secure delivery, resumable ingestion, quality gates and verified cloud execution. The next production priorities would be a durable watermark, operational alerts, schema-version handling and lifecycle policies. I deliberately kept execution manual to control cost and make deployment decisions reviewable.
+> This is a working portfolio data platform, not a production service. It has secure delivery, resumable ingestion, quality gates, a versioned watermark and verified cloud execution. The next operational priorities are alerts, schema-compatibility checks and lifecycle policies. Execution remains manual so every cost-bearing run requires an explicit decision.
 
 That conclusion is stronger than claiming the project is finished in every production dimension.
