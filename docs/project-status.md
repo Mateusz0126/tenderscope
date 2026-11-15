@@ -1,14 +1,10 @@
 # Project status and maturity
 
-Last verified: **2026-11-14**
+Last verified: **2026-11-15**
 
 ## Executive assessment
 
-TenderScope is a **working portfolio data platform**. Unlike a tutorial-only pipeline, it has retries and resumability, blocking data-quality checks, three analytical layers, Bicep infrastructure, approval-gated OIDC workflows and scoped identities.
-
-It is not yet a production data product. It intentionally lacks automatic scheduling and still needs proactive monitoring, retention policies and formal schema evolution. Durable orchestration state is implemented with a versioned contract and optimistic concurrency; its first dev rollout remains to be verified after the infrastructure change is approved.
-
-For portfolio calibration, the project demonstrates a **strong junior / junior-to-mid Data Engineering level**. The cloud security and delivery design push it above a typical junior CRUD or notebook portfolio project; the remaining operational gaps keep it below a mature production platform.
+TenderScope processes bounded TED date windows in Azure dev. The workflow uses retries and resumable ingestion, blocking quality checks, three analytical layers, and approval-gated OIDC with scoped identities. Operators choose which window to run. Proactive monitoring, retention policies, and a policy for schema changes remain open.
 
 ## What works now
 
@@ -16,13 +12,13 @@ For portfolio calibration, the project demonstrates a **strong junior / junior-t
 | --- | --- | --- |
 | TED ingestion | Working | Iterative pagination, retry/backoff, atomic pages and resumable manifest |
 | Incremental windows | Working, manual | Inclusive `since`/`until`; reversed and future windows rejected |
-| Durable state | Implemented, rollout pending | Contiguous next-day windows, versioned JSON and ETag compare-and-swap |
+| Durable state | Bootstrap verified in Azure | Versioned JSON, same-run completion marker and an ETag. Existing-state updates have SDK regression tests. |
 | Bronze | Working | Raw JSON, query metadata, timestamps and page counts |
 | Silver | Working | Notice, buyer and CPV Parquet models |
 | Data quality | Working | Eight DuckDB checks fail the pipeline on invalid data |
 | Empty-day handling | Working | Typed empty Parquet models remain valid |
 | Gold | Working | Four KPI summaries, JSON summary and static HTML report |
-| ADLS publication | Working | Shared run ID and `_SUCCESS` marker written last |
+| ADLS publication | Working | Shared run ID and `_SUCCESS` marker written after all data files and before committing state |
 | CI | Working | Ruff, pytest, Docker build and Bicep validation on PRs and `main` |
 | Deployment | Working, supervised | Protected `dev`, OIDC, immutable image digest and post-deploy verification |
 | Cloud ETL | Working, supervised | Manual date input, approval gate, one Azure execution and terminal-state polling |
@@ -35,6 +31,7 @@ For portfolio calibration, the project demonstrates a **strong junior / junior-t
 - [Run ETL dev #2](https://github.com/Mateusz0126/tenderscope/actions/runs/43640055844) waited for owner approval and completed successfully through OIDC.
 - Azure execution published a shared run with 3 Bronze files, 3 Silver Parquet files, `_SUCCESS.json`, 4 Gold Parquet files, `summary.json` and `report.html`.
 - The 2026-11-11 batch contained 16 notices, 13 unique buyers, 39 unique CPV codes and 3 notice types.
+- The [2026-11-12 ETL](https://github.com/Mateusz0126/tenderscope/actions/runs/43757352887) created the watermark. The stored date, ETag and `_SUCCESS` for its `last_run_id` were checked in ADLS.
 
 ## Known gaps
 
