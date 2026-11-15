@@ -59,15 +59,20 @@ class FakeStateFileClient:
     ):
         exists = self.path in self.file_system.files
 
-        if not overwrite and exists:
-            raise ResourceExistsError("already exists")
-
         if etag is not None:
-            assert match_condition == MatchConditions.IfNotModified
+            if match_condition == MatchConditions.IfMissing:
+                assert etag == "*"
 
-            if etag != self.file_system.etag:
-                raise ResourceModifiedError("etag mismatch")
+                if exists:
+                    raise ResourceExistsError("already exists")
 
+            else:
+                assert match_condition == MatchConditions.IfNotModified
+
+                if etag != self.file_system.etag:
+                    raise ResourceModifiedError("etag mismatch")
+
+        assert overwrite is True
         self.file_system.files[self.path] = bytes(data)
         self.file_system.etag = '"etag-next"'
 

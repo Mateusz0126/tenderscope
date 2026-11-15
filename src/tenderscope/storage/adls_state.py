@@ -103,7 +103,12 @@ def commit_state_with_client(
 
     try:
         if snapshot.etag is None:
-            file_client.upload_data(state.to_json(), overwrite=False)
+            file_client.upload_data(
+                state.to_json(),
+                overwrite=True,
+                etag="*",
+                match_condition=MatchConditions.IfMissing,
+            )
         else:
             file_client.upload_data(
                 state.to_json(),
