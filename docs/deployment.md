@@ -84,5 +84,5 @@ Open **Actions → Run ETL dev → Run workflow** on `main`, then enter `since` 
 
 Choose the dates deliberately before each run. The first state-enforced run bootstraps the stream; every later run must start on the exact next date reported by the watermark. Keep `--allow-partial` disabled so a page-limited subset cannot advance durable state.
 
-Before the first state-enforced execution, deploy the reviewed Bicep change that adds the `control` container and its scoped runtime role. The last verified cloud batch completed `2026-11-11`; use `2026-11-12` as both `since` and `until` for the planned bootstrap. The detailed commit protocol and recovery cases are in [Durable incremental state and recovery](state-and-recovery.md).
+For a new environment, deploy the reviewed Bicep configuration with the `control` container and its scoped runtime role before the first state-enforced execution. For an existing stream, read `last_completed_date` from `control/state/ted-poland-it.json` and set `since` to the next calendar day. Check the execution and matching completion marker using [Durable incremental state and recovery](state-and-recovery.md).
 

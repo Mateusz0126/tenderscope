@@ -87,7 +87,7 @@ stateDiagram-v2
 | ETag precondition fails | Complete run may exist | Preserved from the winning execution | Inspect both run IDs and continue from the current watermark |
 | Invalid requested dates | None | Unchanged | Use the exact next date shown in the error |
 
-## First dev rollout
+## Bootstrap a new environment
 
 The `control` container and its runtime role assignment must exist before enabling the state-enforced workflow. After merging:
 
@@ -97,6 +97,12 @@ The `control` container and its runtime role assignment must exist before enabli
 4. run `Deploy dev` and approve the protected environment;
 5. bootstrap `Run ETL dev` with the first date after the last verified cloud batch.
 
-The last verified batch completed `2026-11-11`, so the planned bootstrap window is `2026-11-12` through `2026-11-12`. After that succeeds, the next accepted start date is `2026-11-13`.
+The [verified dev bootstrap](https://github.com/Mateusz0126/tenderscope/actions/runs/43757352887) used `2026-11-12` as both dates.
+
+## Verify an existing stream after a run
+
+1. Check that the GitHub workflow and Azure execution report success.
+2. Read the watermark and its ETag from the `control` container. Confirm that `last_completed_date` equals the requested `until`. For an existing stream, compare the ETag with the one recorded before execution.
+3. Look up `runs/<last_run_id>/_SUCCESS.json` in the `silver` container. Use the run ID from the watermark, since an earlier attempt may also have published the same dates.
 
 Never create or edit the state JSON manually during routine operation. A manual repair is a production incident: preserve the current file and ETag, identify the corresponding `_SUCCESS.json`, document the decision, and apply a reviewed conditional update.
