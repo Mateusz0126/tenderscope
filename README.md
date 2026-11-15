@@ -6,7 +6,7 @@
 
 TenderScope ingests public tender notices from the [Tenders Electronic Daily (TED)](https://ted.europa.eu/) Search API, preserves raw responses in a Bronze layer, transforms them into analytical Parquet datasets in a Silver layer, validates data quality with DuckDB, and builds run-level Gold procurement KPIs with a self-contained HTML report.
 
-> **Status:** portfolio-ready, production-oriented MVP. The complete Bronze → Silver → Gold path has been verified in Azure. Deployments and data runs are manual and approval-gated by design. See the [current status and maturity assessment](docs/project-status.md).
+> **Status:** working portfolio data platform. The complete Bronze → Silver → Gold path has been verified in Azure. Deployments and data runs are manual and approval-gated. See the [current status and maturity assessment](docs/project-status.md).
 
 ## What this project demonstrates
 
