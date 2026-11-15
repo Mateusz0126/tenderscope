@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -12,18 +11,14 @@ def main() -> None:
     manifest_path = runs[-1]
     run_dir = manifest_path.parent
 
-    manifest = json.loads(
-        manifest_path.read_text(encoding="utf-8")
-    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     all_ids = []
 
     for page in manifest["pages"]:
         file_path = run_dir / page["file"]
 
-        data = json.loads(
-            file_path.read_text(encoding="utf-8")
-        )
+        data = json.loads(file_path.read_text(encoding="utf-8"))
 
         if data.get("timedOut"):
             raise RuntimeError(f"TED timeout: {file_path.name}")
@@ -32,10 +27,7 @@ def main() -> None:
 
         assert len(notices) == page["record_count"]
 
-        ids = [
-            notice["publication-number"]
-            for notice in notices
-        ]
+        ids = [notice["publication-number"] for notice in notices]
 
         all_ids.extend(ids)
 

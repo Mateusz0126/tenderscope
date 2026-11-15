@@ -35,9 +35,7 @@ class PipelineState:
         validate_stream(self.stream)
 
         if self.schema_version != STATE_SCHEMA_VERSION:
-            raise ValueError(
-                f"Unsupported state schema version: {self.schema_version}"
-            )
+            raise ValueError(f"Unsupported state schema version: {self.schema_version}")
 
         if not self.last_run_id.strip():
             raise ValueError("State run ID must not be empty")
@@ -51,9 +49,7 @@ class PipelineState:
             "stream": self.stream,
             "last_completed_date": self.last_completed_date.isoformat(),
             "last_run_id": self.last_run_id,
-            "updated_at_utc": (
-                self.updated_at_utc.astimezone(UTC).isoformat()
-            ),
+            "updated_at_utc": (self.updated_at_utc.astimezone(UTC).isoformat()),
         }
         return json.dumps(payload, indent=2).encode("utf-8")
 
@@ -89,9 +85,7 @@ class PipelineState:
                     str(payload["last_completed_date"])
                 ),
                 last_run_id=str(payload["last_run_id"]),
-                updated_at_utc=datetime.fromisoformat(
-                    str(payload["updated_at_utc"])
-                ),
+                updated_at_utc=datetime.fromisoformat(str(payload["updated_at_utc"])),
             )
         except (TypeError, ValueError) as error:
             raise ValueError("State file contains invalid field values") from error
@@ -123,17 +117,13 @@ def resolve_incremental_window(
     default_window_days: int = 1,
 ) -> DateWindow:
     if not 1 <= default_window_days <= MAX_INCREMENTAL_WINDOW_DAYS:
-        raise ValueError(
-            "Default incremental window must contain between 1 and 7 days"
-        )
+        raise ValueError("Default incremental window must contain between 1 and 7 days")
 
     latest_complete_date = today - timedelta(days=1)
 
     if snapshot.state is None:
         if requested_since is None:
-            raise ValueError(
-                "A since date is required to bootstrap durable state"
-            )
+            raise ValueError("A since date is required to bootstrap durable state")
         since = requested_since
     else:
         expected_since = snapshot.state.last_completed_date + timedelta(days=1)

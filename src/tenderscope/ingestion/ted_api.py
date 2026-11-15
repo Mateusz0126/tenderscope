@@ -50,19 +50,16 @@ def build_query(since: date, until: date | None = None) -> str:
 
 
 def main() -> None:
-    since = datetime.now(UTC).date() - timedelta(
-        days=DEFAULT_LOOKBACK_DAYS
-    )
+    since = datetime.now(UTC).date() - timedelta(days=DEFAULT_LOOKBACK_DAYS)
 
     payload = {
-            "query": build_query(since),
-            "fields": SEARCH_FIELDS,
-            "page": 1,
-            "limit": 10,
-            "scope": "ALL",
-            "paginationMode": "PAGE_NUMBER",
-        }
-
+        "query": build_query(since),
+        "fields": SEARCH_FIELDS,
+        "page": 1,
+        "limit": 10,
+        "scope": "ALL",
+        "paginationMode": "PAGE_NUMBER",
+    }
 
     print("Query:", payload["query"])
 
