@@ -1,4 +1,3 @@
-
 import argparse
 import json
 import time
@@ -38,10 +37,7 @@ def post_with_retry(
             sleep_fn(base_delay * (2**attempt))
             continue
 
-        if (
-            response.status_code in RETRYABLE_STATUSES
-            and attempt < max_retries
-        ):
+        if response.status_code in RETRYABLE_STATUSES and attempt < max_retries:
             retry_after = response.headers.get("Retry-After")
 
             if retry_after and retry_after.isdecimal():
@@ -127,13 +123,15 @@ def save_manifest(path: Path, manifest: dict) -> None:
 
 
 def validate_manifest(manifest: dict, query: str | None) -> None:
+    if (
+        type(manifest.get("schema_version", 1)) is not int
+        or manifest.get("schema_version", 1) != 1
+    ):
+        raise ValueError("Unsupported Bronze manifest schema version")
     if query is not None and query != manifest["query"]:
         raise ValueError("Query differs from existing run")
 
-    if (
-        manifest["page_size"] != PAGE_SIZE
-        or manifest["fields"] != SEARCH_FIELDS
-    ):
+    if manifest["page_size"] != PAGE_SIZE or manifest["fields"] != SEARCH_FIELDS:
         raise ValueError("Incompatible ingestion configuration")
 
 
@@ -147,6 +145,7 @@ def prepare_manifest(path: Path, query: str | None) -> dict:
         raise ValueError("Query required for a new run")
 
     manifest = {
+        "schema_version": 1,
         "query": query,
         "fields": SEARCH_FIELDS,
         "page_size": PAGE_SIZE,
@@ -179,9 +178,7 @@ def persist_page(
         }
     )
     manifest["next_token"] = next_token
-    manifest["status"] = (
-        "completed" if count == 0 or not next_token else "partial"
-    )
+    manifest["status"] = "completed" if count == 0 or not next_token else "partial"
     save_manifest(manifest_path, manifest)
 
 
@@ -192,14 +189,8 @@ def validate_iteration_end(
     total: int | None,
     next_token: str | None,
 ) -> None:
-    if (
-        not next_token
-        and total is not None
-        and downloaded_before + count < total
-    ):
-        raise RuntimeError(
-            "Iteration ended before all notices were downloaded"
-        )
+    if not next_token and total is not None and downloaded_before + count < total:
+        raise RuntimeError("Iteration ended before all notices were downloaded")
 
 
 def run_download(
@@ -241,10 +232,7 @@ def run_download(
         start_page=start_page,
         start_token=start_token,
     ):
-        downloaded_before = sum(
-            page["record_count"]
-            for page in manifest["pages"]
-        )
+        downloaded_before = sum(page["record_count"] for page in manifest["pages"])
 
         validate_iteration_end(
             downloaded_before=downloaded_before,
@@ -298,9 +286,7 @@ def main() -> None:
 
         query = build_query(since, until)
 
-        run_id = datetime.now(UTC).strftime(
-            "%Y%m%dT%H%M%S%fZ"
-        )
+        run_id = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
         run_dir = Path("data/raw") / f"ted_{run_id}"
 
     with httpx.Client(timeout=30.0) as client:

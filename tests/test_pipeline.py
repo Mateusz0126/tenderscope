@@ -1,4 +1,3 @@
-
 import json
 
 import httpx
@@ -77,9 +76,7 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
 
         raise AssertionError("Unexpected API request")
 
-    with httpx.Client(
-        transport=httpx.MockTransport(mock_ted)
-    ) as client:
+    with httpx.Client(transport=httpx.MockTransport(mock_ted)) as client:
         result = run_pipeline(
             client,
             run_dir,
@@ -103,18 +100,10 @@ def test_pipeline_end_to_end(tmp_path, monkeypatch):
         "success_marker": "runs/ted_test/_SUCCESS.json"
     }
     assert published["bronze_dir"] == run_dir
-    assert published["silver_dir"].resolve() == (
-        tmp_path / "data/silver/ted_test"
-    )
-    assert published["gold_dir"].resolve() == (
-        tmp_path / "data/gold/ted_test"
-    )
+    assert published["silver_dir"].resolve() == (tmp_path / "data/silver/ted_test")
+    assert published["gold_dir"].resolve() == (tmp_path / "data/gold/ted_test")
 
-    manifest = json.loads(
-        (run_dir / "manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert manifest["status"] == "completed"
     assert len(manifest["pages"]) == 2
@@ -210,9 +199,7 @@ def test_pipeline_commits_state_only_after_publication(
         assert run_id == "ted_empty"
         return {"last_completed_date": "2026-11-11"}
 
-    with httpx.Client(
-        transport=httpx.MockTransport(mock_ted)
-    ) as client:
+    with httpx.Client(transport=httpx.MockTransport(mock_ted)) as client:
         result = run_pipeline(
             client,
             run_dir,
@@ -223,9 +210,7 @@ def test_pipeline_commits_state_only_after_publication(
         )
 
     assert events == ["published", "state_committed"]
-    assert result["state_metrics"] == {
-        "last_completed_date": "2026-11-11"
-    }
+    assert result["state_metrics"] == {"last_completed_date": "2026-11-11"}
 
 
 def test_pipeline_rejects_state_without_publication(tmp_path):
@@ -270,19 +255,21 @@ def test_pipeline_accepts_completed_empty_date_window(
             },
         )
 
-    with httpx.Client(
-        transport=httpx.MockTransport(mock_ted)
-    ) as client:
+    with httpx.Client(transport=httpx.MockTransport(mock_ted)) as client:
         result = run_pipeline(
             client,
             run_dir,
-            query=(
-                "publication-date>=20261101 "
-                "AND publication-date<=20261101"
-            ),
+            query=("publication-date>=20261101 AND publication-date<=20261101"),
             max_pages=1,
         )
 
+    summary = json.loads((tmp_path / "data/gold/ted_empty/summary.json").read_text())
+    assert summary["extraction"]["requested_window"] == {
+        "from": "2026-11-01",
+        "to": "2026-11-01",
+    }
+    assert summary["date_range"] == {"from": None, "to": None}
+    assert summary["extraction"]["status"] == "completed"
     assert result["bronze_records"] == 0
     assert result["silver_metrics"] == {
         "notices": 0,
@@ -314,3 +301,40 @@ def test_pipeline_accepts_completed_empty_date_window(
         "xml_url": pl.String,
     }
 
+
+@pytest.mark.parametrize("complete", [False, True])
+def test_report_preserves_requested_scope_and_completeness(
+    tmp_path, monkeypatch, complete
+):
+    monkeypatch.chdir(tmp_path)
+
+    def respond(request):
+        return httpx.Response(
+            200,
+            json={
+                "notices": [make_notice("001-2026", "72000000")],
+                "iterationNextToken": None if complete else "more",
+                "totalNoticeCount": 1 if complete else 2,
+            },
+        )
+
+    with httpx.Client(transport=httpx.MockTransport(respond)) as client:
+        run_pipeline(
+            client,
+            tmp_path / "data/raw/ted_scope",
+            query="publication-date>=20261029 AND publication-date<=20261031",
+            max_pages=1,
+            allow_partial=True,
+        )
+    output = tmp_path / "data/gold/ted_scope"
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["extraction"]["status"] == ("completed" if complete else "partial")
+    assert summary["extraction"]["requested_window"] == {
+        "from": "2026-10-29",
+        "to": "2026-10-31",
+    }
+    assert summary["date_range"] == {"from": "2026-10-30", "to": "2026-10-30"}
+    report = (output / "report.html").read_text(encoding="utf-8")
+    assert ("PARTIAL SAMPLE" in report) is not complete
+    assert "Distinct buyer names" in report
+    assert summary["quality_verified"] is True

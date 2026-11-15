@@ -86,3 +86,11 @@ Choose the dates deliberately before each run. The first state-enforced run boot
 
 For a new environment, deploy the reviewed Bicep configuration with the `control` container and its scoped runtime role before the first state-enforced execution. For an existing stream, read `last_completed_date` from `control/state/ted-poland-it.json` and set `since` to the next calendar day. Check the execution and matching completion marker using [Durable incremental state and recovery](state-and-recovery.md).
 
+
+## Page limits and diagnostics
+
+`Run ETL dev` accepts `max_pages` from 1 through 100 (default 2, up to 50 notices per page). Increase it deliberately for larger windows. Reaching the limit while more data exists still fails publication and leaves the watermark unchanged. The seven-day and execution-time limits remain in place.
+
+The final workflow summary reports the requested dates, page limit, image digest, Azure execution, observed status and failed workflow stages, including failures before ETL starts. A polling timeout does not cancel Azure execution. Check the execution logs and watermark before retrying. The summary is diagnostic output, not proactive notification; no new alert resources are provisioned.
+
+Publication IDs are single-use. After a cloud upload failure, retry the same date window as a new run. Existing reports keep their old format until a new batch is generated with the updated image.

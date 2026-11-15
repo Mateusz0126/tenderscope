@@ -13,6 +13,11 @@ on:
         description: Last publication date (YYYY-MM-DD, maximum 7 days inclusive)
         required: true
         type: string
+      max_pages:
+        description: Maximum pages to fetch (1-100, 50 notices per page)
+        required: true
+        default: "2"
+        type: string
 
 permissions:
   contents: read
@@ -36,10 +41,12 @@ jobs:
 
     steps:
       - name: Validate date window
+        id: validate
         shell: bash
         env:
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
+          MAX_PAGES: ${{ inputs.max_pages }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -48,12 +55,18 @@ jobs:
 
           since_text = os.environ["SINCE"]
           until_text = os.environ["UNTIL"]
+          pages_text = os.environ["MAX_PAGES"]
+          if not pages_text.isascii() or not pages_text.isdecimal() or not 1 <= int(pages_text) <= 100:
+              raise SystemExit("max_pages must be an integer between 1 and 100.")
 
           try:
               since = date.fromisoformat(since_text)
               until = date.fromisoformat(until_text)
           except ValueError as exc:
               raise SystemExit("Dates must use the YYYY-MM-DD format.") from exc
+
+          if since.isoformat() != since_text or until.isoformat() != until_text:
+              raise SystemExit("Dates must use the YYYY-MM-DD format.")
 
           if since > until:
               raise SystemExit("The since date must not be after the until date.")
@@ -70,6 +83,7 @@ jobs:
           PY
 
       - name: Validate Azure configuration
+        id: config
         shell: bash
         env:
           AZURE_ETL_CLIENT_ID: ${{ secrets.AZURE_ETL_CLIENT_ID }}
@@ -93,6 +107,7 @@ jobs:
           done
 
       - name: Sign in to Azure with OIDC
+        id: login
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
         with:
           client-id: ${{ secrets.AZURE_ETL_CLIENT_ID }}
@@ -100,15 +115,18 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Install Container Apps CLI extension
+        id: cli
         run: az extension add --name containerapp --upgrade
 
       - name: Prepare one-time execution template
+        id: template
         shell: bash
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
           AZURE_JOB_NAME: ${{ vars.AZURE_JOB_NAME }}
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
+          MAX_PAGES: ${{ inputs.max_pages }}
         run: |
           set -euo pipefail
           az containerapp job show \
@@ -129,12 +147,16 @@ jobs:
             exit 1
           fi
 
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+
           jq \
             --arg since "${SINCE}" \
             --arg until "${UNTIL}" \
+            --arg max_pages "${MAX_PAGES}" \
             '.containers[0].args = [
               "--since", $since,
               "--until", $until,
+              "--max-pages", $max_pages,
               "--state-policy", "enforce"
             ]' \
             current-template.json > execution-template.yaml
@@ -165,6 +187,7 @@ jobs:
           echo "Started ${execution_name}"
 
       - name: Wait for ETL result
+        id: wait
         shell: bash
         env:
           AZURE_RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
@@ -172,6 +195,7 @@ jobs:
           EXECUTION_NAME: ${{ steps.execution.outputs.name }}
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
+          MAX_PAGES: ${{ inputs.max_pages }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 1800))
@@ -200,18 +224,55 @@ jobs:
             esac
           done
 
-          {
-            echo "### TenderScope ETL dev"
-            echo "- Date window: \`${SINCE}\` through \`${UNTIL}\`"
-            echo "- Execution: \`${EXECUTION_NAME}\`"
-            echo "- Status: \`${status:-Timed out}\`"
-            echo "- Durable watermark: \`enforced\`"
-          } >> "${GITHUB_STEP_SUMMARY}"
+          last_status="${status:-Unknown}"
+          case "${status}" in
+            Succeeded|Failed|Stopped|Degraded) ;;
+            *) status="TimedOut" ;;
+          esac
+          echo "status=${status}" >> "${GITHUB_OUTPUT}"
+          echo "last_status=${last_status}" >> "${GITHUB_OUTPUT}"
 
           if [[ "${status}" != "Succeeded" ]]; then
             echo "ETL execution ended with status: ${status:-Timed out}" >&2
             exit 1
           fi
+
+      - name: Summarize execution
+        if: always()
+        env:
+          STEPS_JSON: ${{ toJSON(steps) }}
+          SINCE: ${{ inputs.since }}
+          UNTIL: ${{ inputs.until }}
+          MAX_PAGES: ${{ inputs.max_pages }}
+        run: |
+          python - <<'PY'
+          import html
+          import json
+          import os
+          from pathlib import Path
+
+          steps = json.loads(os.environ["STEPS_JSON"])
+          failed = [name for name, step in steps.items() if step.get("outcome") in ("failure", "cancelled")]
+          execution = steps.get("execution", {}).get("outputs", {}).get("name", "Not started")
+          result = steps.get("wait", {}).get("outputs", {})
+          rows = {
+              "Requested dates": f"{os.environ['SINCE']} through {os.environ['UNTIL']}",
+              "Page limit": os.environ["MAX_PAGES"],
+              "Azure execution": execution,
+              "Azure status": result.get("status", "Not observed"),
+              "Last observed status": result.get("last_status", "Not observed"),
+              "Failed workflow stages": ", ".join(failed) or "None",
+              "Image": steps.get("template", {}).get("outputs", {}).get("image", "Not resolved"),
+          }
+          with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as output:
+              output.write("### TenderScope ETL dev\n\n")
+              for label, value in rows.items():
+                  output.write(f"<p><strong>{label}:</strong> {html.escape(value)}</p>\n")
+              if failed or result.get("status") != "Succeeded":
+                  output.write("\nInspect the failed step and Container Apps execution logs before retrying. "
+                               "A polling timeout does not stop the Azure execution. "
+                               "Verify the execution and watermark before starting another run.\n")
+          PY
 
       - name: Sign out from Azure
         if: always()

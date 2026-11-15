@@ -1,5 +1,5 @@
-
 import argparse
+import json
 import os
 import time
 from collections.abc import Callable
@@ -59,9 +59,7 @@ def run_pipeline(
         raise ValueError("Durable state cannot advance a partial ingestion")
 
     start_time = time.monotonic()
-    total_steps = 5 + int(publisher is not None) + int(
-        state_committer is not None
-    )
+    total_steps = 5 + int(publisher is not None) + int(state_committer is not None)
 
     def print_step(number: int, label: str) -> None:
         print(f"\n[{number}/{total_steps}] {label}")
@@ -109,7 +107,12 @@ def run_pipeline(
     print_step(5, "Gold analytical models")
     silver_dir = Path("data/silver") / run_dir.name
     gold_dir = Path("data/gold") / run_dir.name
-    gold_metrics = write_gold(silver_dir, gold_dir)
+    gold_metrics = write_gold(
+        silver_dir,
+        gold_dir,
+        manifest=json.loads((run_dir / "manifest.json").read_text(encoding="utf-8")),
+        quality_verified=True,
+    )
 
     print("Gold metrics:", gold_metrics)
 
@@ -195,9 +198,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--state-policy",
         choices=("off", "enforce"),
         default="off",
-        help=(
-            "Use a durable ADLS watermark and reject date gaps or overlaps."
-        ),
+        help=("Use a durable ADLS watermark and reject date gaps or overlaps."),
     )
 
     parser.add_argument(
@@ -352,4 +353,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

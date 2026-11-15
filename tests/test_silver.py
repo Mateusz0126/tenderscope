@@ -1,4 +1,3 @@
-
 from copy import deepcopy
 
 import pytest
@@ -72,3 +71,26 @@ def test_buyer_deduplication(sample_notice):
             "buyer_name": "Firma A",
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("buyer-name", {"pol": "unexpected scalar"}),
+        ("notice-title", {"pol": ["unexpected list"]}),
+        ("links", {"xml": []}),
+        ("classification-cpv", [None]),
+        ("classification-cpv", ["invalid"]),
+        ("notice-type", {}),
+    ],
+)
+def test_incompatible_source_fields_fail_explicitly(sample_notice, field, value):
+    sample_notice[field] = value
+    with pytest.raises(TypeError):
+        transform_notices([sample_notice])
+
+
+def test_additive_source_fields_are_compatible(sample_notice):
+    before = transform_notices([sample_notice])
+    sample_notice["future-ted-field"] = {"anything": [1, 2]}
+    assert transform_notices([sample_notice]) == before

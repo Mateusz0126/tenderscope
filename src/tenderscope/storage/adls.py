@@ -5,19 +5,27 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import IO, Protocol
 
-from azure.core.exceptions import ResourceExistsError
+from azure.core import MatchConditions
+from azure.core.exceptions import ResourceExistsError, ResourceModifiedError
 from azure.identity import DefaultAzureCredential
 from azure.storage.filedatalake import DataLakeServiceClient
 
 STORAGE_ACCOUNT_PATTERN = re.compile(r"^[a-z0-9]{3,24}$")
 
 
+class PublicationConflictError(RuntimeError):
+    """A run ID is already published or reserved by another attempt."""
+
+
 class FileClient(Protocol):
+    def exists(self) -> bool: ...
+
     def upload_data(
         self,
         data: bytes | IO[bytes],
         *,
         overwrite: bool,
+        **kwargs: object,
     ) -> object: ...
 
 
@@ -56,13 +64,7 @@ def list_local_files(directory: Path) -> tuple[Path, ...]:
     if not directory.is_dir():
         raise FileNotFoundError(f"Missing local directory: {directory}")
 
-    files = tuple(
-        sorted(
-            path
-            for path in directory.rglob("*")
-            if path.is_file()
-        )
-    )
+    files = tuple(sorted(path for path in directory.rglob("*") if path.is_file()))
 
     if not files:
         raise ValueError(f"No files found in {directory}")
@@ -119,6 +121,13 @@ def publish_run_with_client(
     if len({run_dir.name, silver_dir.name, gold_dir.name}) != 1:
         raise ValueError("Bronze, Silver and Gold run IDs must match")
 
+    for directory in (run_dir, silver_dir, gold_dir):
+        if any(
+            path.name in {"_SUCCESS.json", "_PUBLICATION.json"}
+            for path in list_local_files(directory)
+        ):
+            raise ValueError("Local input contains a reserved publication filename")
+
     normalized_prefix = normalize_prefix(prefix)
     target_directory = f"{normalized_prefix}/{run_dir.name}"
 
@@ -126,11 +135,27 @@ def publish_run_with_client(
     silver = service_client.get_file_system_client("silver")
     gold = service_client.get_file_system_client("gold")
 
+    # Reserve each ID once, including failed attempts. Never release this claim:
+    # a crashed writer could still be active and must not race a retry.
+    marker_path = f"{target_directory}/_SUCCESS.json"
+    if silver.get_file_client(marker_path).exists():
+        raise PublicationConflictError("Run is already published; use a new run ID")
+    ensure_directory(bronze, target_directory)
+    try:
+        bronze.get_file_client(f"{target_directory}/_PUBLICATION.json").upload_data(
+            json.dumps({"run_id": run_dir.name}).encode("utf-8"),
+            overwrite=True,
+            match_condition=MatchConditions.IfMissing,
+        )
+    except (ResourceExistsError, ResourceModifiedError) as error:
+        raise PublicationConflictError(
+            "Run ID is already reserved; retry the date window with a new run ID"
+        ) from error
+
     bronze_files = upload_files(bronze, run_dir, target_directory)
     silver_files = upload_files(silver, silver_dir, target_directory)
     gold_files = upload_files(gold, gold_dir, target_directory)
 
-    marker_path = f"{target_directory}/_SUCCESS.json"
     marker = {
         "run_id": run_dir.name,
         "published_at_utc": now().astimezone(UTC).isoformat(),
@@ -180,4 +205,3 @@ def publish_run_to_adls(
     finally:
         service_client.close()
         credential.close()
-

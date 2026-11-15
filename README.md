@@ -26,6 +26,7 @@ TenderScope ingests public tender notices from the [Tenders Electronic Daily (TE
 - [Architecture and trust boundaries](docs/architecture.md)
 - [Codebase structure and dependency rationale](docs/codebase.md)
 - [Durable state, failure modes and recovery](docs/state-and-recovery.md)
+- [Data contracts, metric definitions and historical corrections](docs/data-contracts.md)
 - [Five-to-seven minute demonstration](docs/demo.md)
 - [Current status, evidence, gaps and maturity](docs/project-status.md)
 - [Supervised deployment and ETL execution](docs/deployment.md)
@@ -101,7 +102,7 @@ The query is built in `src/tenderscope/ingestion/ted_api.py`. The ingestion code
 On **2026-11-14**, the protected workflow processed the completed historical day **2026-11-11** after an explicit `dev` approval. The run published all three layers and produced:
 
 - 16 notices;
-- 13 unique buyers;
+- 13 distinct buyer names;
 - 39 unique CPV codes;
 - 3 notice types;
 - 3 Silver Parquet datasets, 4 Gold Parquet summaries, `summary.json` and `report.html`.
@@ -123,7 +124,7 @@ Evidence: [successful ETL workflow](https://github.com/Mateusz0126/tenderscope/a
 │   ├── quality/
 │   │   └── silver.py           # DuckDB data-quality gate
 │   ├── storage/
-│   │   └── adls.py             # Idempotent Bronze/Silver/Gold publication
+│   │   └── adls.py             # Reserved Bronze/Silver/Gold publication
 │   └── pipeline.py             # End-to-end orchestration
 ├── scripts/
 │   └── smoke_adls.py           # Standalone ADLS connectivity smoke test
@@ -218,6 +219,8 @@ uv run python -m tenderscope.pipeline --resume data/raw/ted_<run_id> --max-pages
 ```
 
 Replace `<run_id>` with an existing run directory. The downloader uses the stored query, page manifest and next-page token to continue. Completed runs are not downloaded again.
+
+The report distinguishes complete extraction from a partial sample, shows requested and observed dates separately, and counts distinct buyer names rather than resolved organizations. Cloud publication reserves each run ID once; retry a failed publication using a new run ID.
 
 ### Output
 
@@ -336,9 +339,9 @@ For a portfolio walkthrough, use the [short demonstration script](docs/demo.md).
 - [x] Build run-level Gold analytical models and procurement KPIs
 - [x] Add a zero-hosting-cost static dashboard report
 - [ ] Add operational monitoring
-- [ ] Add versioned source and Silver schema compatibility checks
+- [x] Add source shape validation, a versioned Bronze contract and Silver schema compatibility checks
 
-The unchecked items are deliberate production gaps, not hidden features. Their impact and priority are explained in [Current status and maturity](docs/project-status.md).
+The unchecked items remain open. Their impact and priority are explained in [Current status and maturity](docs/project-status.md).
 
 ## Why this project?
 

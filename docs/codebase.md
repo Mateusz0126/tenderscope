@@ -13,7 +13,7 @@ flowchart TB
     silver[transformations.silver]
     gold[transformations.gold]
     quality[quality.silver]
-    adls[storage.adls<br/>immutable run publication]
+    adls[storage.adls<br/>reserved run publication]
     stateAdapter[storage.adls_state<br/>ETag state adapter]
 
     cli --> ingest
@@ -71,7 +71,7 @@ flowchart BT
 - Fake ADLS clients exercise missing state, create conflicts and stale ETags without cloud credentials.
 - HTTPX mock transports exercise pagination, retry and end-to-end pipeline behavior.
 - Pipeline tests verify that state commits only after successful publication.
-- CI runs Ruff, pytest, Docker build and Bicep compilation on every pull request.
+- CI runs Ruff lint/format checks, pytest, Docker build and Bicep compilation on every pull request.
 - A manually approved Azure run remains the final integration check because it changes external state and may incur cost.
 
 ## Change boundaries
