@@ -106,7 +106,6 @@ def commit_state_with_client(
             file_client.upload_data(
                 state.to_json(),
                 overwrite=True,
-                etag="*",
                 match_condition=MatchConditions.IfMissing,
             )
         else:

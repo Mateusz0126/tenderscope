@@ -1,13 +1,17 @@
 from datetime import UTC, date, datetime
+from io import BytesIO
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
+import requests
 from azure.core import MatchConditions
 from azure.core.exceptions import (
     ResourceExistsError,
     ResourceModifiedError,
     ResourceNotFoundError,
 )
+from azure.storage.filedatalake import DataLakeServiceClient
 
 from tenderscope.orchestration.state import (
     DateWindow,
@@ -60,17 +64,16 @@ class FakeStateFileClient:
         exists = self.path in self.file_system.files
 
         if etag is not None:
-            if match_condition == MatchConditions.IfMissing:
-                assert etag == "*"
+            assert match_condition == MatchConditions.IfNotModified
 
-                if exists:
-                    raise ResourceExistsError("already exists")
+            if etag != self.file_system.etag:
+                raise ResourceModifiedError("etag mismatch")
 
-            else:
-                assert match_condition == MatchConditions.IfNotModified
+        if match_condition == MatchConditions.IfMissing:
+            assert etag is None
 
-                if etag != self.file_system.etag:
-                    raise ResourceModifiedError("etag mismatch")
+            if exists:
+                raise ResourceExistsError("already exists")
 
         assert overwrite is True
         self.file_system.files[self.path] = bytes(data)
@@ -205,3 +208,44 @@ def test_concurrent_bootstrap_is_rejected():
             ),
             "ted_current",
         )
+
+
+@pytest.mark.parametrize(
+    ("snapshot", "header", "expected"),
+    [
+        (StateSnapshot(None, None), "If-None-Match", "*"),
+        (StateSnapshot(make_state(), '"previous"'), "If-Match", '"previous"'),
+    ],
+)
+def test_state_commit_sends_conditional_request_through_azure_sdk(
+    monkeypatch, snapshot, header, expected
+):
+    requests_seen = []
+
+    def send(_session, request, **_kwargs):
+        query = parse_qs(urlsplit(request.url).query)
+        action = query.get("action", [None])[0]
+        response = requests.Response()
+        response.request = request
+        response.raw = BytesIO()
+        response.headers["ETag"] = '"new"'
+        response.status_code = {None: 201, "append": 202, "flush": 200}[action]
+        response._content = b""
+        requests_seen.append(request)
+        return response
+
+    monkeypatch.setattr(requests.Session, "send", send)
+    with DataLakeServiceClient("https://example.dfs.core.windows.net") as service:
+        commit_state_with_client(
+            service,
+            "ted-poland-it",
+            snapshot,
+            DateWindow(date(2026, 11, 12), date(2026, 11, 12)),
+            "ted_current",
+        )
+
+    _, create, append, flush = requests_seen
+    assert create.method == "PUT"
+    assert create.headers[header] == expected
+    assert PipelineState.from_json(append.body).last_run_id == "ted_current"
+    assert flush.headers["If-Match"] == '"new"'
