@@ -18,6 +18,7 @@ TenderScope processes bounded TED date windows in Azure dev. The workflow uses r
 | Data quality | Working | Eight DuckDB checks fail the pipeline on invalid data |
 | Empty-day handling | Working | Typed empty Parquet models remain valid |
 | Gold | Working | Four KPI summaries, JSON summary and static HTML report |
+| Power BI | Local Desktop import and DAX verified | Two-page PBIP starter; distinct notices, complete-day coverage, CPV filters and source provenance |
 | History | Local build verified using Azure inputs | Reviewed catalog, whole-window replacements, provenance and complete date coverage |
 | ADLS publication | Working | Shared run ID and `_SUCCESS` marker written after all data files and before committing state |
 | CI | Working | Ruff, pytest, Docker build and Bicep validation on PRs and `main` |
@@ -55,7 +56,7 @@ TenderScope processes bounded TED date windows in Azure dev. The workflow uses r
 
 ## Next milestone
 
-Use the reviewed historical tables to define a Power BI model and business measures. Proactive failure notifications and retention remain operational follow-ups.
+The Power BI starter defines a local import model, distinct-notice measures and two report pages; see [setup and acceptance checks](powerbi.md). Extend the reviewed history through a supervised backfill before interpreting trends. Proactive failure notifications and retention remain operational follow-ups.
 
 ## Reliability hardening
 

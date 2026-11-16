@@ -100,10 +100,11 @@ CI also builds the Docker image and compiles Bicep. Tests use local fixtures and
 - [Data contracts and metric definitions](docs/data-contracts.md)
 - [Historical selection and corrections](docs/history.md)
 - [Supervised backfill of earlier dates](docs/backfill.md)
+- [Power BI Desktop report and model](docs/powerbi.md)
 - [State, failures and recovery](docs/state-and-recovery.md)
 - [Deployment and manual ETL](docs/deployment.md)
 - [Infrastructure and cost controls](infra/README.md)
 - [Current status and remaining work](docs/project-status.md)
 - [Demonstration checklist](docs/demo.md)
 
-Power BI, automatic detection of historical corrections, proactive failure alerts and storage lifecycle policies remain open. Execution stays manual. The project is independent of TED and the European Commission.
+A local Power BI starter is included; see the setup and acceptance checks above. Automatic detection of historical corrections, proactive failure alerts and storage lifecycle policies remain open. Execution stays manual. The project is independent of TED and the European Commission.

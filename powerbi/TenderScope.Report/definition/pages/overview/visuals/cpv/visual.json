@@ -1,0 +1,93 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "cpv",
+  "position": {
+    "x": 780,
+    "y": 170,
+    "z": 0,
+    "width": 480,
+    "height": 520,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "DimCPV"
+                    }
+                  },
+                  "Property": "cpv_code"
+                }
+              },
+              "queryRef": "DimCPV.cpv_code",
+              "nativeQueryRef": "cpv_code",
+              "displayName": "Kod CPV"
+            },
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "Notices"
+                }
+              },
+              "queryRef": "FactNotice.Notices",
+              "nativeQueryRef": "Notices",
+              "displayName": "Ogłoszenia"
+            }
+          ]
+        }
+      },
+      "sortDefinition": {
+        "sort": [
+          {
+            "field": {
+              "Measure": {
+                "Expression": {
+                  "SourceRef": {
+                    "Entity": "FactNotice"
+                  }
+                },
+                "Property": "Notices"
+              }
+            },
+            "direction": "Descending"
+          }
+        ]
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Kody CPV — sumy kategorii nie są addytywne'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

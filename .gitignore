@@ -42,3 +42,9 @@ Thumbs.db
 # Local historical inputs and built snapshots
 data/history-inputs/
 data/history/
+
+# Local Power BI data, caches and user settings
+data/powerbi/
+**/.pbi/
+*.pbix
+*.pbit
