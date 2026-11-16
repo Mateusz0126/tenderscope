@@ -1,12 +1,12 @@
 # Codebase structure and dependency rationale
 
-TenderScope keeps domain rules separate from external systems. The command-line pipeline is the composition root: it connects pure date/state rules, HTTP ingestion, transformations, quality checks and Azure adapters.
+TenderScope keeps domain rules separate from external systems. The command-line pipeline it connects pure date/state rules, HTTP ingestion, transformations, quality checks and Azure adapters.
 
 ## Module dependency map
 
 ```mermaid
 flowchart TB
-    cli[pipeline.py<br/>composition root]
+    cli[pipeline.py<br/>execution planning]
     ingest[ingestion<br/>TED client + pagination]
     orchestration[orchestration<br/>pure state rules]
     bronze[transformations.bronze_reader]
@@ -15,6 +15,11 @@ flowchart TB
     quality[quality.silver]
     adls[storage.adls<br/>reserved run publication]
     stateAdapter[storage.adls_state<br/>ETag state adapter]
+
+    history[history.py<br/>reviewed batch selection] --> quality
+    history --> gold
+    history --> bronze
+    download[history_download.py<br/>read-only source download] --> azure
 
     cli --> ingest
     cli --> orchestration
@@ -53,7 +58,7 @@ The dependency direction is deliberate:
 | Azure Data Lake SDK | Data and control persistence | ADLS directories, uploads, ETags and conditional writes through the native data plane |
 | uv | Environment and lockfile | Reproducible dependency resolution and fast CI/local setup |
 
-Spark, an orchestrator database and a hosted BI service are intentionally absent. The bounded data volume does not justify their cost or operational surface. The architecture can add them later behind existing layer and state contracts if scale or service objectives require it.
+Spark, an orchestrator database and a hosted BI service are intentionally absent. The bounded data volume does not justify their cost or operational surface. A larger deployment would need its own performance measurements and storage design.
 
 ## Test strategy
 
@@ -80,10 +85,11 @@ flowchart BT
 | --- | --- | --- |
 | TED request or pagination | `ingestion/` | response-shape, retry, resume and page tests |
 | Silver schema | `transformations/silver.py` | transform tests, DuckDB checks and compatibility policy |
+| Historical selection | `history.py` | replacements, coverage, duplicate IDs and provenance |
 | New KPI or report visual | `transformations/gold.py` | model, empty-data and HTML tests |
 | Date/window policy | `orchestration/state.py` | pure transition and edge-case tests |
 | ADLS behavior | `storage/` | adapter tests plus approved cloud smoke test |
 | Permissions or resources | `infra/` | Bicep build, `what-if`, reviewed deployment |
 | Deployment or execution | `.github/workflows/` | CI syntax/build checks and protected `dev` approval |
 
-This separation keeps changes reviewable and prevents a data-model edit from silently changing deployment permissions or orchestration progress.
+The history builder reuses Silver validation and Gold aggregation. It does not write to Azure or change the watermark.

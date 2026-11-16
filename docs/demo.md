@@ -1,78 +1,27 @@
-# TenderScope demonstration
+# Demonstration checklist
 
-This walkthrough presents the project in five to seven minutes without exposing credentials or spending money on an unnecessary always-on service.
+Use existing successful runs; a live ETL is optional. Keep credentials and environment secrets off screen.
 
-## Before the call
+## Explain the data
 
-- Keep the repository, the latest successful CI run and Azure Storage browser available in separate tabs.
-- Use a completed historical day with a small result set if a live ETL run is planned.
-- Never show environment secret values, access tokens, storage keys or local credential files.
-- A live cloud run is optional. The verified run from 2026-11-14 is sufficient evidence if time is limited.
+TED publishes procurement notices. TenderScope currently selects Polish buyers and IT-related CPV codes. A publication is not necessarily a distinct procurement procedure, and buyer names are not verified organization identities.
 
-## 1. Frame the problem
+## Follow one batch
 
-> TenderScope turns public TED procurement notices into quality-gated analytical datasets. I focused the sample on Polish buyers and IT-related CPV codes, then designed the pipeline so every batch is reproducible and traceable across Bronze, Silver and Gold.
+Show the original query and page count in Bronze, the three Silver tables and the quality gate. Then show the shared run ID in the publication marker and Gold report. Explain how partial extraction differs from a complete empty day.
 
-Show the first screen of `README.md`, especially the capability table and verified run.
+## Show one failure case
 
-## 2. Explain the architecture
+Use the failed-publication test: a run ID is reserved before upload, so retrying it cannot alter previously published data. Another test shows that the watermark advances only after publication. Explain why a retry uses a new run ID.
 
-Open [architecture.md](architecture.md) and cover three points:
+## Show delivery
 
-1. raw API evidence is kept separately from transformed models;
-2. quality checks run before any cloud publication is marked complete;
-3. deployment, execution and runtime access use separate Azure identities.
+Open a successful CI run and a deployment. CI checks Python, tests, Docker and Bicep. Deployment and ETL are separate manual workflows with protected `dev` approval and separate Azure identities. A successful state-enforced ETL advances the watermark automatically; there is no scheduler.
 
-The strongest engineering story is not the number of Azure resources. It is the explicit trust boundary and failure behavior.
+## Show history
 
-## 3. Show engineering quality
+Open `catalogs/dev-history.json`, then the daily summary from [the history walkthrough](history.md). It contains 27, 26 and zero notices for 12–14 November. Point to the source run IDs. Explain why scanning every successful run would double-count retries and why a correction replaces an entire reviewed window.
 
-Open the latest CI run and point out:
+## Explain the remaining work
 
-- Ruff;
-- pytest;
-- Docker build;
-- Bicep compilation;
-- read-only repository permissions.
-
-Then show one focused test, such as the failed-upload or empty-day pipeline test, instead of scrolling through the entire test suite.
-
-## 4. Show supervised delivery
-
-Open `Actions → Deploy dev` and explain:
-
-- the workflow runs only from `main`;
-- the protected `dev` environment requires owner approval;
-- GitHub obtains a short-lived Azure token through OIDC;
-- the image is deployed by immutable digest;
-- deploying the image does not start the ETL job.
-
-## 5. Show a data run
-
-Open `Actions → Run ETL dev`, select a completed historical window and explain the safeguards:
-
-- maximum seven inclusive days;
-- one workflow at a time;
-- protected-environment approval;
-- manual Container Apps execution;
-- 30-minute timeout;
-- no automatic schedule or watermark advancement.
-
-For a live demo, approve the run yourself and wait for `Succeeded`. Otherwise open the [verified run](https://github.com/Mateusz0126/tenderscope/actions/runs/43640055844).
-
-## 6. Show the result
-
-In ADLS, use the shared run identifier to move through:
-
-1. `bronze/runs/<run_id>/manifest.json`;
-2. `silver/runs/<run_id>/_SUCCESS.json`;
-3. `gold/runs/<run_id>/summary.json`;
-4. `gold/runs/<run_id>/report.html`.
-
-For the verified 2026-11-11 batch, call out 16 notices, 13 unique buyers, 39 unique CPV codes and 3 notice types.
-
-## 7. Finish with trade-offs
-
-> This is a working portfolio data platform, not a production service. It has secure delivery, resumable ingestion, quality gates, a versioned watermark and verified cloud execution. The next operational priorities are alerts, schema-compatibility checks and lifecycle policies. Execution remains manual so every cost-bearing run requires an explicit decision.
-
-That conclusion is stronger than claiming the project is finished in every production dimension.
+Historical selection is manual. Automated detection of source corrections, proactive alerts, retention policies and the Power BI model are not implemented. The project has working cloud execution and a local historical builder; it has not been benchmarked as a large-scale production service.
