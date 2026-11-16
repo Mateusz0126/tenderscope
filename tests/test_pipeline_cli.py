@@ -88,3 +88,29 @@ def test_durable_plan_rejects_partial_ingestion(capsys):
         build_execution_plan(args, parser, now=NOW)
 
     assert "cannot advance a partial ingestion" in capsys.readouterr().err
+
+
+def test_backfill_publishes_separately_without_reading_or_committing_state(monkeypatch):
+    def unexpected_state_read(*args, **kwargs):
+        raise AssertionError("Backfill must not read the incremental watermark")
+
+    monkeypatch.setattr(pipeline_module, "read_pipeline_state", unexpected_state_read)
+    plan = make_plan(
+        "--since",
+        "2026-11-05",
+        "--until",
+        "2026-11-11",
+        "--max-pages",
+        "10",
+        "--state-policy",
+        "off",
+        "--storage-prefix",
+        "backfills/2026-11-05_2026-11-11",
+        "--storage-account",
+        "sttenderscope123123",
+    )
+    assert plan.state_committer is None
+    assert plan.publisher is not None
+    assert plan.publisher.keywords["prefix"] == "backfills/2026-11-05_2026-11-11"
+    assert plan.allow_partial is False
+    assert plan.max_pages == 10

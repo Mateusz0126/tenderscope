@@ -41,7 +41,7 @@ TenderScope processes bounded TED date windows in Azure dev. The workflow uses r
 | P1 | No proactive operational alert | A failed manual run is visible in GitHub but does not notify an operator outside GitHub | Add a low-cost failure notification and Azure alert |
 | P2 | No automatic historical reconciliation | The watermark does not revisit corrected historical data | Use the reviewed history catalog; add source reconciliation only when needed |
 | P2 | No storage lifecycle policy | Old raw pages and reports accumulate indefinitely | Add reviewed retention tiers for dev data |
-| P2 | No automated backfill orchestration | Windows are bounded and manually selected | Add a controlled backfill command with idempotent state |
+| P2 | Historical extraction remains manual | Backfill mode prepares bounded batches, but no catch-up loop or schedule exists | Verify the first supervised backfill before extending the date range |
 | P2 | Report is not hosted | The HTML artifact must be downloaded or opened from storage | Keep it static or publish to a deliberately chosen low-cost host |
 | P3 | No production SLO or disaster-recovery plan | Acceptable for a portfolio dev environment, not for a business service | Define freshness, recovery and ownership requirements first |
 
@@ -64,3 +64,5 @@ The publication protocol now rejects reuse of completed or reserved run IDs, inc
 The ETL workflow offers a bounded page limit and an always-run diagnostic summary. The [14 November empty-day run](https://github.com/Mateusz0126/tenderscope/actions/runs/43833398567) verified the new reservation, report metadata and watermark update in Azure. Proactive alerts and automated retention remain open.
 
 On 16 November the historical builder combined existing batches for 12–14 November into 53 notices with source run IDs. This was a local build from Azure inputs, not a deployed historical service. See [history](history.md).
+
+The manual workflow now offers a separate backfill mode. It has workflow/CLI tests but has not yet been verified through an Azure backfill execution. See [the pilot plan](backfill.md).

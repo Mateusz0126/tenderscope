@@ -28,7 +28,7 @@ For a historical discrepancy:
 4. If cloud publication is approved, use a new run ID and a separate `--storage-prefix corrections/<review-id>`, keep `--state-policy off`, and require a complete, validated batch.
 5. Append the replacement to the reviewed history catalog with `supersedes`, the exact original window and a reason. Rebuild a new snapshot; do not union old and replacement batches.
 
-The normal GitHub workflow cannot execute corrections or disable state enforcement. Automatic historical reconciliation is not implemented. The [history catalog](history.md) explicitly selects accepted runs and replacements. Cross-run aggregation must not blindly scan every successful run: at-least-once publication can produce duplicate windows.
+The GitHub workflow defaults to state-enforced incremental processing. Its explicitly selected [backfill mode](backfill.md) writes a separate batch without moving the watermark; accepting it into history still requires catalog review. Automatic historical reconciliation is not implemented. The [history catalog](history.md) explicitly selects accepted runs and replacements. Cross-run aggregation must not blindly scan every successful run: at-least-once publication can produce duplicate windows.
 
 ## Evolving a contract
 

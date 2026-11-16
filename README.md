@@ -99,6 +99,7 @@ CI also builds the Docker image and compiles Bicep. Tests use local fixtures and
 - [Module responsibilities and dependencies](docs/codebase.md)
 - [Data contracts and metric definitions](docs/data-contracts.md)
 - [Historical selection and corrections](docs/history.md)
+- [Supervised backfill of earlier dates](docs/backfill.md)
 - [State, failures and recovery](docs/state-and-recovery.md)
 - [Deployment and manual ETL](docs/deployment.md)
 - [Infrastructure and cost controls](infra/README.md)
