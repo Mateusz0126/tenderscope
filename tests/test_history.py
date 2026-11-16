@@ -287,3 +287,22 @@ def test_source_change_during_read_is_rejected(tmp_path, monkeypatch):
     with pytest.raises(ValueError, match="changed during"):
         build(tmp_path, catalog(run))
     assert not (tmp_path / "history").exists()
+
+
+def test_history_accepts_completed_legacy_sort_with_same_filters(tmp_path):
+    run = entry()
+    raw, _ = write_run(tmp_path / "inputs", run, [notice()])
+    path = raw / "manifest.json"
+    manifest = json.loads(path.read_text())
+    manifest["query"] = manifest["query"].replace(
+        "SORT BY publication-number DESC", "SORT BY publication-date DESC"
+    )
+    path.write_text(json.dumps(manifest))
+    assert build(tmp_path, catalog(run))["notice_count"] == 1
+
+    manifest["query"] = manifest["query"].replace(
+        "buyer-country=POL", "buyer-country=DEU"
+    )
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(ValueError, match="query"):
+        build(tmp_path, catalog(run), "wrong-filter")

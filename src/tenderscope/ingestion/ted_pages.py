@@ -190,7 +190,10 @@ def validate_iteration_end(
     next_token: str | None,
 ) -> None:
     if not next_token and total is not None and downloaded_before + count < total:
-        raise RuntimeError("Iteration ended before all notices were downloaded")
+        raise RuntimeError(
+            "Iteration ended before all notices were downloaded: "
+            f"received {downloaded_before + count}, expected {total}"
+        )
 
 
 def run_download(
