@@ -11,7 +11,7 @@ def test_build_query():
     assert "buyer-country=POL" in query
     assert "classification-cpv=72*" in query
     assert "publication-date>=20261001" in query
-    assert "SORT BY publication-date DESC" in query
+    assert "SORT BY publication-number DESC" in query
 
 
 def test_build_query_with_closed_date_window():

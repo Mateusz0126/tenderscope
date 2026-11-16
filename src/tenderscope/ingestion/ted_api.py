@@ -45,7 +45,7 @@ def build_query(since: date, until: date | None = None) -> str:
         "buyer-country=POL "
         "AND classification-cpv=72* "
         f"AND {date_filter} "
-        "SORT BY publication-date DESC"
+        "SORT BY publication-number DESC"
     )
 
 

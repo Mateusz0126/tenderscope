@@ -115,7 +115,11 @@ def source_files(root: Path, entry: dict) -> list[Path]:
     if marker.get("run_id") != entry["run_id"]:
         raise ValueError("Completion marker belongs to another run")
     expected_query = build_query(parse_day(entry["since"]), parse_day(entry["until"]))
-    if manifest.get("query") != expected_query:
+    # Previously accepted batches used date ordering with identical predicates.
+    legacy_query = expected_query.replace(
+        "SORT BY publication-number DESC", "SORT BY publication-date DESC"
+    )
+    if manifest.get("query") not in {expected_query, legacy_query}:
         raise ValueError("Catalog window or stream differs from the source query")
     if manifest.get("status") != "completed":
         raise ValueError("History rejects partial runs")

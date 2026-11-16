@@ -21,7 +21,7 @@ After merging this workflow change, use **Actions → Run ETL dev → Run workfl
 - until: `2026-11-11`;
 - max_pages: `10`.
 
-Review the dates and mode before approving `dev`. This is a proposed pilot, not a record of an executed run. The application already supports the required arguments; this workflow change alone does not require a new application deployment if the currently deployed image includes the publication/report fixes from PR #17.
+Review the dates and mode before approving `dev`. The first pilot failed during ingestion; see the investigation below before retrying. The application already supports the required arguments; this workflow change alone does not require a new application deployment if the currently deployed image includes the publication/report fixes from PR #17.
 
 The workflow executes the currently deployed image by digest. No new image is built for a backfill. The summary records mode, dates, image, page limit, storage prefix and state policy.
 
@@ -43,3 +43,27 @@ Start with the single pilot. If it passes, extend backwards in reviewed windows,
 A failure before publication leaves the watermark unchanged. A failed publication may leave an incomplete reserved run; retry with a new run ID. A GitHub polling timeout does not stop an Azure execution. Inspect its status before starting another attempt. The existing job has a 30-minute replica timeout and one retry, so polling timeout is not a hard cost cap for the whole execution.
 
 Automatic collection every two days is a separate change: it needs date selection from the watermark, failure handling and an explicit decision about unattended execution. The current workflow remains manual.
+
+## Pilot investigation: 16 November 2026
+
+[Run 43952366229](https://github.com/Mateusz0126/tenderscope/actions/runs/43952366229)
+failed before publication. TED reported 120 matching notices, but iteration ordered
+only by publication date returned 50, 47 and then 0 records. A local replay reproduced
+the same discrepancy. The completeness check rejected the 97-record result, as intended.
+No files were published under the requested backfill prefix. The incremental
+watermark stayed at 14 November, with its ETag unchanged.
+
+Ordering by the unique publication number returned 50, 50, 20 and 0 records,
+including 120 distinct notice IDs. The complete local pipeline then passed all
+Bronze/Silver checks and built Gold (120 notices, 98 buyer names, 202 CPV codes).
+This is local validation, not an accepted Azure history batch.
+
+New searches use publication-number ordering. History accepts both the new order
+and the previous date order with exactly the same stream/date predicates; all
+existing completion and quality checks still apply. Existing resumable checkpoints
+retain their original query. Do not change a checkpoint's query or token to switch
+ordering; start a new run instead.
+
+The fix must be deployed through the protected dev workflow before retrying the
+same bounded pilot. Increasing the page limit would not repair this failure.
+The catalog remains unchanged until a new Azure run succeeds and is reviewed.
