@@ -85,3 +85,7 @@ GitHub federation is restricted to the repository's protected `dev` environment.
 These decisions are appropriate for a portfolio environment. A production service would additionally need proactive alerting, retention policies, service objectives and an approved manual state-repair procedure.
 
 See [data contracts](data-contracts.md) for compatibility, metric definitions and historical correction limitations.
+
+## Historical analysis
+
+The local history builder reads only batches named by a reviewed catalog. It validates complete date coverage, source contracts and notice IDs before rebuilding historical tables and Gold summaries. Corrections replace an entire selected window. Outputs carry source run IDs and hashes; old snapshots remain unchanged. See [historical selection](history.md) for the commands and limitations.

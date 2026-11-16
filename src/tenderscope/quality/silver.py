@@ -11,6 +11,7 @@ def validate_silver(
     run_dir: Path,
     *,
     allow_partial: bool = False,
+    silver_dir: Path | None = None,
 ) -> dict[str, int]:
     """Validate Silver data against the Bronze manifest."""
 
@@ -22,7 +23,7 @@ def validate_silver(
 
     expected = sum(page["record_count"] for page in manifest["pages"])
 
-    silver_dir = Path("data/silver") / run_dir.name
+    silver_dir = silver_dir or Path("data/silver") / run_dir.name
 
     for table, schema in (
         ("notice", NOTICE_SCHEMA),

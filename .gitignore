@@ -38,3 +38,7 @@ infra/modules/*.json
 .DS_Store
 Thumbs.db
 
+
+# Local historical inputs and built snapshots
+data/history-inputs/
+data/history/

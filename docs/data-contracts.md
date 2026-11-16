@@ -18,7 +18,7 @@ The HTML report displays this distinction. Existing cloud reports are not rewrit
 
 ## Historical corrections
 
-The production-style incremental path remains contiguous and never rewinds its watermark. Do not edit the watermark or reuse a published run ID to repair history.
+The incremental path remains contiguous and never rewinds its watermark. Do not edit the watermark or reuse a published run ID to repair history.
 
 For a historical discrepancy:
 
@@ -26,9 +26,9 @@ For a historical discrepancy:
 2. Re-extract locally with explicit `--since` and `--until`, `--state-policy off`, without a storage account and without `--allow-partial`. Unset `TENDERSCOPE_STORAGE_ACCOUNT` if it is present. Choose a page limit that completes the extraction.
 3. Compare notice IDs and values with the original batch. Review additions, removals and changed fields; a different row count alone is not approval.
 4. If cloud publication is approved, use a new run ID and a separate `--storage-prefix corrections/<review-id>`, keep `--state-policy off`, and require a complete, validated batch.
-5. Record the replacement run, original run, dates and approval in the same review. Downstream analysis must explicitly select that replacement rather than union both runs.
+5. Append the replacement to the reviewed history catalog with `supersedes`, the exact original window and a reason. Rebuild a new snapshot; do not union old and replacement batches.
 
-The normal GitHub workflow cannot execute corrections or disable state enforcement. Automatic historical reconciliation and a machine-readable catalog of accepted replacements are not implemented. Until a catalog exists, cross-run aggregation must not blindly scan every successful run: at-least-once publication can produce duplicate windows.
+The normal GitHub workflow cannot execute corrections or disable state enforcement. Automatic historical reconciliation is not implemented. The [history catalog](history.md) explicitly selects accepted runs and replacements. Cross-run aggregation must not blindly scan every successful run: at-least-once publication can produce duplicate windows.
 
 ## Evolving a contract
 

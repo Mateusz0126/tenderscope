@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "stream": "ted-poland-it",
+  "since": "2026-11-12",
+  "until": "2026-11-14",
+  "runs": [
+    {
+      "run_id": "ted_20261115T202019663752Z",
+      "since": "2026-11-12",
+      "until": "2026-11-12",
+      "reason": "Successful bootstrap ETL 43757352887; selected for the initial history."
+    },
+    {
+      "run_id": "ted_20261115T210130206133Z",
+      "since": "2026-11-13",
+      "until": "2026-11-13",
+      "reason": "Successful incremental ETL 43760919253."
+    },
+    {
+      "run_id": "ted_20261116T084422738621Z",
+      "since": "2026-11-14",
+      "until": "2026-11-14",
+      "reason": "Successful empty-day ETL 43833398567."
+    }
+  ]
+}
