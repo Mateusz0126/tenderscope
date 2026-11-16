@@ -1,0 +1,13 @@
+-- Acceptance query for the reviewed 2026-11-12 through 2026-11-14 snapshot.
+-- Expected: 53, 3, 27, 26, 0, 15, 6, TRUE.
+EVALUATE
+ROW(
+    "Total", [Notices],
+    "Days", [Covered days],
+    "Nov12", CALCULATE([Notices], DimDate[Date] = DATE(2026, 11, 12)),
+    "Nov13", CALCULATE([Notices], DimDate[Date] = DATE(2026, 11, 13)),
+    "EmptyDay", CALCULATE([Notices], DimDate[Date] = DATE(2026, 11, 14)),
+    "CPV72000000", CALCULATE([Notices], DimCPV[cpv_code] = "72000000"),
+    "CPVNov12", CALCULATE([Notices], DimCPV[cpv_code] = "72000000", DimDate[Date] = DATE(2026, 11, 12)),
+    "UnknownDayBlank", ISBLANK(CALCULATE([Notices], DimDate[Date] = DATE(2026, 11, 15)))
+)

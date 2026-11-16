@@ -1,0 +1,136 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "detail",
+  "position": {
+    "x": 20,
+    "y": 20,
+    "z": 0,
+    "width": 1240,
+    "height": 680,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "tableEx",
+    "query": {
+      "queryState": {
+        "Values": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "notice_id"
+                }
+              },
+              "queryRef": "FactNotice.notice_id",
+              "nativeQueryRef": "notice_id",
+              "displayName": "ID ogłoszenia"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "publication_date"
+                }
+              },
+              "queryRef": "FactNotice.publication_date",
+              "nativeQueryRef": "publication_date",
+              "displayName": "Data publikacji"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "title_pl"
+                }
+              },
+              "queryRef": "FactNotice.title_pl",
+              "nativeQueryRef": "title_pl",
+              "displayName": "Tytuł PL"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "title_en"
+                }
+              },
+              "queryRef": "FactNotice.title_en",
+              "nativeQueryRef": "title_en",
+              "displayName": "Tytuł EN"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "notice_type"
+                }
+              },
+              "queryRef": "FactNotice.notice_type",
+              "nativeQueryRef": "notice_type",
+              "displayName": "Typ ogłoszenia"
+            },
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "source_run_id"
+                }
+              },
+              "queryRef": "FactNotice.source_run_id",
+              "nativeQueryRef": "source_run_id",
+              "displayName": "Źródłowy run"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Ogłoszenia i pochodzenie danych'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

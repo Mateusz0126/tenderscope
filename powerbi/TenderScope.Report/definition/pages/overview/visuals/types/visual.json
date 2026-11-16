@@ -1,0 +1,80 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/visualContainer/2.1.0/schema.json",
+  "name": "types",
+  "position": {
+    "x": 20,
+    "y": 490,
+    "z": 0,
+    "width": 740,
+    "height": 200,
+    "tabOrder": 0
+  },
+  "visual": {
+    "visualType": "clusteredBarChart",
+    "query": {
+      "queryState": {
+        "Category": {
+          "projections": [
+            {
+              "field": {
+                "Column": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "notice_type"
+                }
+              },
+              "queryRef": "FactNotice.notice_type",
+              "nativeQueryRef": "notice_type",
+              "displayName": "Typ ogłoszenia"
+            }
+          ]
+        },
+        "Y": {
+          "projections": [
+            {
+              "field": {
+                "Measure": {
+                  "Expression": {
+                    "SourceRef": {
+                      "Entity": "FactNotice"
+                    }
+                  },
+                  "Property": "Notices"
+                }
+              },
+              "queryRef": "FactNotice.Notices",
+              "nativeQueryRef": "Notices",
+              "displayName": "Ogłoszenia"
+            }
+          ]
+        }
+      }
+    },
+    "visualContainerObjects": {
+      "title": [
+        {
+          "properties": {
+            "show": {
+              "expr": {
+                "Literal": {
+                  "Value": "true"
+                }
+              }
+            },
+            "text": {
+              "expr": {
+                "Literal": {
+                  "Value": "'Rodzaje ogłoszeń'"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "drillFilterOtherVisuals": true
+  }
+}

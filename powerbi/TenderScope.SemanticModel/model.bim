@@ -1,0 +1,322 @@
+{
+  "name": "TenderScope",
+  "compatibilityLevel": 1600,
+  "model": {
+    "culture": "en-US",
+    "defaultPowerBIDataSourceVersion": "powerBI_V3",
+    "expressions": [
+      {
+        "name": "SourceFolder",
+        "kind": "m",
+        "expression": "\"REPLACE_WITH_VERIFIED_SNAPSHOT_PATH\" meta [IsParameterQuery=true, Type=\"Text\", IsParameterQueryRequired=true]"
+      }
+    ],
+    "tables": [
+      {
+        "name": "FactNotice",
+        "isHidden": false,
+        "columns": [
+          {
+            "name": "notice_id",
+            "dataType": "string",
+            "sourceColumn": "notice_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "publication_date",
+            "dataType": "dateTime",
+            "sourceColumn": "publication_date",
+            "summarizeBy": "none",
+            "formatString": "yyyy-MM-dd"
+          },
+          {
+            "name": "title_pl",
+            "dataType": "string",
+            "sourceColumn": "title_pl",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "title_en",
+            "dataType": "string",
+            "sourceColumn": "title_en",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "notice_type",
+            "dataType": "string",
+            "sourceColumn": "notice_type",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "xml_url",
+            "dataType": "string",
+            "sourceColumn": "xml_url",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "source_run_id",
+            "dataType": "string",
+            "sourceColumn": "source_run_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "source_prefix",
+            "dataType": "string",
+            "sourceColumn": "source_prefix",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FactNotice",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "let Source = Parquet.Document(File.Contents(SourceFolder & \"/notice.parquet\")), Typed = Table.TransformColumnTypes(Source, {{\"publication_date\", type date}}) in Typed"
+            }
+          }
+        ],
+        "measures": [
+          {
+            "name": "Notices",
+            "expression": "VAR HasCPV = ISFILTERED(DimCPV[cpv_code])\nVAR HasBuyer = ISFILTERED(DimBuyerName[buyer_name])\nVAR CPVNotices = VALUES(BridgeNoticeCPV[notice_id])\nVAR BuyerNotices = VALUES(BridgeNoticeBuyer[notice_id])\nVAR Result = SWITCH(TRUE(),\n    HasCPV && HasBuyer, CALCULATE(DISTINCTCOUNT(FactNotice[notice_id]), KEEPFILTERS(TREATAS(CPVNotices, FactNotice[notice_id])), KEEPFILTERS(TREATAS(BuyerNotices, FactNotice[notice_id]))),\n    HasCPV, CALCULATE(DISTINCTCOUNT(FactNotice[notice_id]), KEEPFILTERS(TREATAS(CPVNotices, FactNotice[notice_id]))),\n    HasBuyer, CALCULATE(DISTINCTCOUNT(FactNotice[notice_id]), KEEPFILTERS(TREATAS(BuyerNotices, FactNotice[notice_id]))),\n    DISTINCTCOUNT(FactNotice[notice_id]))\nRETURN IF([Covered days] > 0, COALESCE(Result, 0), BLANK())",
+            "description": "Unique notice IDs; category totals are not additive.",
+            "formatString": "#,0"
+          },
+          {
+            "name": "Covered days",
+            "expression": "CALCULATE(COUNTROWS(FactCoverage), FactCoverage[complete] = TRUE())",
+            "description": "Complete source days in the date selection; independent of CPV and buyer.",
+            "formatString": "#,0"
+          },
+          {
+            "name": "Notices per covered day",
+            "expression": "DIVIDE([Notices], [Covered days])",
+            "description": "Includes verified days with zero notices.",
+            "formatString": "0.00"
+          }
+        ]
+      },
+      {
+        "name": "FactCoverage",
+        "isHidden": false,
+        "columns": [
+          {
+            "name": "publication_date",
+            "dataType": "dateTime",
+            "sourceColumn": "publication_date",
+            "summarizeBy": "none",
+            "formatString": "yyyy-MM-dd"
+          },
+          {
+            "name": "complete",
+            "dataType": "boolean",
+            "sourceColumn": "complete",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "notice_count",
+            "dataType": "int64",
+            "sourceColumn": "notice_count",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "source_run_id",
+            "dataType": "string",
+            "sourceColumn": "source_run_id",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "FactCoverage",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "let Source = Parquet.Document(File.Contents(SourceFolder & \"/daily_summary.parquet\")), Typed = Table.TransformColumnTypes(Source, {{\"publication_date\", type date}}) in Typed"
+            }
+          }
+        ]
+      },
+      {
+        "name": "DimDate",
+        "isHidden": false,
+        "columns": [
+          {
+            "name": "Date",
+            "dataType": "dateTime",
+            "sourceColumn": "Date",
+            "summarizeBy": "none",
+            "formatString": "yyyy-MM-dd"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DimDate",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "let Source = FactCoverage, Dates = Table.Distinct(Table.SelectColumns(Source, {\"publication_date\"})), Renamed = Table.RenameColumns(Dates, {{\"publication_date\", \"Date\"}}) in Renamed"
+            }
+          }
+        ]
+      },
+      {
+        "name": "BridgeNoticeCPV",
+        "isHidden": true,
+        "columns": [
+          {
+            "name": "notice_id",
+            "dataType": "string",
+            "sourceColumn": "notice_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "cpv_code",
+            "dataType": "string",
+            "sourceColumn": "cpv_code",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "BridgeNoticeCPV",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "Parquet.Document(File.Contents(SourceFolder & \"/notice_cpv.parquet\"))"
+            }
+          }
+        ]
+      },
+      {
+        "name": "DimCPV",
+        "isHidden": false,
+        "columns": [
+          {
+            "name": "cpv_code",
+            "dataType": "string",
+            "sourceColumn": "cpv_code",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DimCPV",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "Table.Distinct(Table.SelectColumns(BridgeNoticeCPV, {\"cpv_code\"}))"
+            }
+          }
+        ]
+      },
+      {
+        "name": "BridgeNoticeBuyer",
+        "isHidden": true,
+        "columns": [
+          {
+            "name": "notice_id",
+            "dataType": "string",
+            "sourceColumn": "notice_id",
+            "summarizeBy": "none"
+          },
+          {
+            "name": "buyer_name",
+            "dataType": "string",
+            "sourceColumn": "buyer_name",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "BridgeNoticeBuyer",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "Parquet.Document(File.Contents(SourceFolder & \"/notice_buyer.parquet\"))"
+            }
+          }
+        ]
+      },
+      {
+        "name": "DimBuyerName",
+        "isHidden": false,
+        "columns": [
+          {
+            "name": "buyer_name",
+            "dataType": "string",
+            "sourceColumn": "buyer_name",
+            "summarizeBy": "none"
+          }
+        ],
+        "partitions": [
+          {
+            "name": "DimBuyerName",
+            "mode": "import",
+            "source": {
+              "type": "m",
+              "expression": "Table.Distinct(Table.SelectColumns(BridgeNoticeBuyer, {\"buyer_name\"}))"
+            }
+          }
+        ]
+      }
+    ],
+    "relationships": [
+      {
+        "name": "FactNotice_publication_date",
+        "fromTable": "FactNotice",
+        "fromColumn": "publication_date",
+        "toTable": "DimDate",
+        "toColumn": "Date",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "FactCoverage_publication_date",
+        "fromTable": "FactCoverage",
+        "fromColumn": "publication_date",
+        "toTable": "DimDate",
+        "toColumn": "Date",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "BridgeNoticeCPV_notice_id",
+        "fromTable": "BridgeNoticeCPV",
+        "fromColumn": "notice_id",
+        "toTable": "FactNotice",
+        "toColumn": "notice_id",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "BridgeNoticeCPV_cpv_code",
+        "fromTable": "BridgeNoticeCPV",
+        "fromColumn": "cpv_code",
+        "toTable": "DimCPV",
+        "toColumn": "cpv_code",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "BridgeNoticeBuyer_notice_id",
+        "fromTable": "BridgeNoticeBuyer",
+        "fromColumn": "notice_id",
+        "toTable": "FactNotice",
+        "toColumn": "notice_id",
+        "crossFilteringBehavior": "oneDirection"
+      },
+      {
+        "name": "BridgeNoticeBuyer_buyer_name",
+        "fromTable": "BridgeNoticeBuyer",
+        "fromColumn": "buyer_name",
+        "toTable": "DimBuyerName",
+        "toColumn": "buyer_name",
+        "crossFilteringBehavior": "oneDirection"
+      }
+    ],
+    "annotations": [
+      {
+        "name": "__PBI_TimeIntelligenceEnabled",
+        "value": "0"
+      }
+    ]
+  }
+}
