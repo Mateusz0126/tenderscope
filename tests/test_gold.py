@@ -69,9 +69,9 @@ def test_write_gold_writes_typed_empty_models_and_report(tmp_path):
     pl.DataFrame(
         schema={"notice_id": pl.String, "buyer_name": pl.String}
     ).write_parquet(silver_dir / "notice_buyer.parquet")
-    pl.DataFrame(
-        schema={"notice_id": pl.String, "cpv_code": pl.String}
-    ).write_parquet(silver_dir / "notice_cpv.parquet")
+    pl.DataFrame(schema={"notice_id": pl.String, "cpv_code": pl.String}).write_parquet(
+        silver_dir / "notice_cpv.parquet"
+    )
 
     metrics = write_gold(silver_dir, target)
 
@@ -88,7 +88,6 @@ def test_write_gold_writes_typed_empty_models_and_report(tmp_path):
         "unique_buyers": pl.UInt32,
         "unique_cpv_codes": pl.UInt32,
     }
-    assert "No records in this run" in (
-        target / "report.html"
-    ).read_text(encoding="utf-8")
-
+    assert "No records in this run" in (target / "report.html").read_text(
+        encoding="utf-8"
+    )

@@ -1,4 +1,3 @@
-
 import httpx
 import pytest
 
@@ -18,9 +17,7 @@ def test_retry_after_503():
 
         return httpx.Response(200, json={"notices": []})
 
-    with httpx.Client(
-        transport=httpx.MockTransport(mock_api)
-    ) as client:
+    with httpx.Client(transport=httpx.MockTransport(mock_api)) as client:
         response = post_with_retry(
             client,
             {"query": "test"},
@@ -41,9 +38,7 @@ def test_no_retry_for_400():
         return httpx.Response(400)
 
     with (
-        httpx.Client(
-            transport=httpx.MockTransport(mock_api)
-        ) as client,
+        httpx.Client(transport=httpx.MockTransport(mock_api)) as client,
         pytest.raises(httpx.HTTPStatusError),
     ):
         post_with_retry(

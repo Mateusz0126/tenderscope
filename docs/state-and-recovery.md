@@ -36,6 +36,14 @@ sequenceDiagram
 
 This is an **at-least-once publication protocol**. A process can fail after `_SUCCESS.json` but before the state commit. In that narrow case, the same date may be republished under a new run ID, but the watermark never advances without complete data and never silently skips a date. Consumers should use `_SUCCESS.json` and the recorded run ID as their completion boundary.
 
+## Publication reservation
+
+Before uploading data, the publisher checks for an existing completion marker and conditionally creates `bronze/runs/<run_id>/_PUBLICATION.json` using `If-None-Match: *`. Only one attempt can reserve an ID. The reservation is never removed automatically, even after failure. A retry uses a new run ID and the same date window; local ingestion resume must not republish an already reserved ID.
+
+Existing successful runs without a reservation are also rejected before any data upload. This is an application-level write-once protocol, not an Azure immutable-storage policy: administrators and older code with storage permissions can still alter files. Do not run older publishers concurrently with the new protocol.
+
+A failed upload leaves incomplete files and a reservation but no completion marker. Preserve them for diagnosis. Never delete a reservation just to force a retry.
+
 ## State contract
 
 ```json
@@ -82,7 +90,7 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | TED request or pagination | No complete run | Unchanged | Retry the same window; ingestion retry/resume remains available locally |
 | Silver transform or quality gate | No cloud publication | Unchanged | Fix the data/code issue and retry the same window |
-| ADLS layer upload | Possible incomplete files, no `_SUCCESS` | Unchanged | Retry; consumers ignore the incomplete run |
+| ADLS layer upload | Possible incomplete files, no `_SUCCESS` | Unchanged | Retry with a new run ID; consumers ignore the incomplete run |
 | `_SUCCESS` written, process exits before state commit | Complete run exists | Unchanged | Verify the marker, then retry the same window; duplicate run IDs are safe but should be recorded |
 | ETag precondition fails | Complete run may exist | Preserved from the winning execution | Inspect both run IDs and continue from the current watermark |
 | Invalid requested dates | None | Unchanged | Use the exact next date shown in the error |
@@ -106,3 +114,5 @@ The [verified dev bootstrap](https://github.com/Mateusz0126/tenderscope/actions/
 3. Look up `runs/<last_run_id>/_SUCCESS.json` in the `silver` container. Use the run ID from the watermark, since an earlier attempt may also have published the same dates.
 
 Never create or edit the state JSON manually during routine operation. A manual repair is a production incident: preserve the current file and ETag, identify the corresponding `_SUCCESS.json`, document the decision, and apply a reviewed conditional update.
+
+Historical corrections follow the separate [data contract and correction procedure](data-contracts.md). They do not rewind the incremental watermark.

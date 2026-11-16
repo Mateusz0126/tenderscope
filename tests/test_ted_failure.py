@@ -1,4 +1,3 @@
-
 import json
 
 import httpx
@@ -53,10 +52,7 @@ def test_resume_after_failure(tmp_path):
 
     run_dir = tmp_path / "test_run"
 
-    with httpx.Client(
-        transport=httpx.MockTransport(mock_api)
-    ) as client:
-
+    with httpx.Client(transport=httpx.MockTransport(mock_api)) as client:
         # First execution: fails on page 2
         with pytest.raises(
             RuntimeError,
@@ -69,15 +65,9 @@ def test_resume_after_failure(tmp_path):
                 max_pages=2,
             )
 
-        first_page = (
-            run_dir / "page_001.json"
-        ).read_bytes()
+        first_page = (run_dir / "page_001.json").read_bytes()
 
-        checkpoint = json.loads(
-            (run_dir / "manifest.json").read_text(
-                encoding="utf-8"
-            )
-        )
+        checkpoint = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
         assert checkpoint["status"] == "partial"
         assert len(checkpoint["pages"]) == 1
@@ -90,11 +80,7 @@ def test_resume_after_failure(tmp_path):
             max_pages=2,
         )
 
-    manifest = json.loads(
-        (run_dir / "manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert requests == [None, "token-2", "token-2"]
     assert len(manifest["pages"]) == 2

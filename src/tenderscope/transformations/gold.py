@@ -1,5 +1,6 @@
 import html
 import json
+import re
 from datetime import date
 from pathlib import Path
 
@@ -43,13 +44,10 @@ def build_gold(
             "cpv_summary": _empty(CPV_SUMMARY_SCHEMA),
             "notice_type_summary": _empty(NOTICE_TYPE_SUMMARY_SCHEMA),
         }
-
     notice_dates = notices.select("notice_id", "publication_date")
-
     daily = notices.group_by("publication_date").agg(
         pl.len().cast(pl.UInt32).alias("notice_count")
     )
-
     if buyers.is_empty():
         buyers_by_day = pl.DataFrame(
             {
@@ -64,34 +62,21 @@ def build_gold(
             on="notice_id",
             how="inner",
         )
-        buyers_by_day = buyers_with_dates.group_by(
-            "publication_date"
-        ).agg(
-            pl.col("buyer_name")
-            .n_unique()
-            .cast(pl.UInt32)
-            .alias("unique_buyers")
+        buyers_by_day = buyers_with_dates.group_by("publication_date").agg(
+            pl.col("buyer_name").n_unique().cast(pl.UInt32).alias("unique_buyers")
         )
         buyer_summary = (
             buyers_with_dates.group_by("buyer_name")
             .agg(
-                pl.col("notice_id")
-                .n_unique()
-                .cast(pl.UInt32)
-                .alias("notice_count"),
-                pl.col("publication_date").min().alias(
-                    "first_publication_date"
-                ),
-                pl.col("publication_date").max().alias(
-                    "last_publication_date"
-                ),
+                pl.col("notice_id").n_unique().cast(pl.UInt32).alias("notice_count"),
+                pl.col("publication_date").min().alias("first_publication_date"),
+                pl.col("publication_date").max().alias("last_publication_date"),
             )
             .sort(
                 ["notice_count", "buyer_name"],
                 descending=[True, False],
             )
         )
-
     if cpvs.is_empty():
         cpvs_by_day = pl.DataFrame(
             {
@@ -107,25 +92,16 @@ def build_gold(
             how="inner",
         )
         cpvs_by_day = cpvs_with_dates.group_by("publication_date").agg(
-            pl.col("cpv_code")
-            .n_unique()
-            .cast(pl.UInt32)
-            .alias("unique_cpv_codes")
+            pl.col("cpv_code").n_unique().cast(pl.UInt32).alias("unique_cpv_codes")
         )
         cpv_summary = (
             cpvs_with_dates.group_by("cpv_code")
-            .agg(
-                pl.col("notice_id")
-                .n_unique()
-                .cast(pl.UInt32)
-                .alias("notice_count")
-            )
+            .agg(pl.col("notice_id").n_unique().cast(pl.UInt32).alias("notice_count"))
             .sort(
                 ["notice_count", "cpv_code"],
                 descending=[True, False],
             )
         )
-
     daily = (
         daily.join(buyers_by_day, on="publication_date", how="left")
         .join(cpvs_by_day, on="publication_date", how="left")
@@ -136,12 +112,9 @@ def build_gold(
         .select(*DAILY_SCHEMA)
         .sort("publication_date")
     )
-
     notice_type_summary = (
         notices.with_columns(
-            pl.col("notice_type")
-            .fill_null("unknown")
-            .replace("", "unknown")
+            pl.col("notice_type").fill_null("unknown").replace("", "unknown")
         )
         .group_by("notice_type")
         .agg(pl.len().cast(pl.UInt32).alias("notice_count"))
@@ -150,25 +123,20 @@ def build_gold(
             descending=[True, False],
         )
     )
-
     return {
         "daily_summary": daily,
         "buyer_summary": buyer_summary.select(*BUYER_SUMMARY_SCHEMA),
         "cpv_summary": cpv_summary.select(*CPV_SUMMARY_SCHEMA),
-        "notice_type_summary": notice_type_summary.select(
-            *NOTICE_TYPE_SUMMARY_SCHEMA
-        ),
+        "notice_type_summary": notice_type_summary.select(*NOTICE_TYPE_SUMMARY_SCHEMA),
     }
 
 
 def _json_rows(frame: pl.DataFrame) -> list[dict[str, object]]:
     rows = frame.to_dicts()
-
     for row in rows:
         for key, value in row.items():
             if isinstance(value, date):
                 row[key] = value.isoformat()
-
     return rows
 
 
@@ -177,13 +145,11 @@ def _table_rows(
     columns: tuple[tuple[str, str], ...],
 ) -> str:
     if not rows:
-        return '<tr><td colspan="4">No records in this run.</td></tr>'
-
+        return f'<tr><td colspan="{len(columns)}">No records in this run.</td></tr>'
     return "".join(
         "<tr>"
         + "".join(
-            f"<td>{html.escape(str(row.get(key, '')))}</td>"
-            for key, _ in columns
+            f"<td>{html.escape(str(row.get(key, '')))}</td>" for key, _ in columns
         )
         + "</tr>"
         for row in rows
@@ -193,7 +159,20 @@ def _table_rows(
 def render_report(summary: dict[str, object]) -> str:
     totals = summary["totals"]
     date_range = summary["date_range"]
-
+    extraction = summary["extraction"]
+    window = extraction["requested_window"]
+    completeness = {
+        "completed": "Complete extraction",
+        "partial": "PARTIAL SAMPLE - not a complete extraction",
+        "unknown": "Extraction completeness unknown",
+    }[extraction["status"]]
+    quality = "passed" if summary["quality_verified"] else "not verified by this report"
+    requested = f"{window['from'] or 'unspecified'} to {window['to'] or 'open-ended'}"
+    observed = (
+        f"{date_range['from']} to {date_range['to']}"
+        if date_range["from"]
+        else "No records in this run"
+    )
     sections = (
         (
             "Top buyers",
@@ -211,20 +190,18 @@ def render_report(summary: dict[str, object]) -> str:
             (("notice_type", "Type"), ("notice_count", "Notices")),
         ),
     )
-
     tables = "".join(
         f"""
         <section class="panel">
           <h2>{html.escape(title)}</h2>
           <table>
-            <thead><tr>{''.join(f'<th>{html.escape(label)}</th>' for _, label in columns)}</tr></thead>
+            <thead><tr>{"".join(f"<th>{html.escape(label)}</th>" for _, label in columns)}</tr></thead>
             <tbody>{_table_rows(rows, columns)}</tbody>
           </table>
         </section>
         """
         for title, rows, columns in sections
     )
-
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -253,18 +230,20 @@ def render_report(summary: dict[str, object]) -> str:
 <body>
   <main>
     <header>
-      <p>TenderScope · validated run</p>
+      <p>TenderScope · run report</p>
       <h1>Polish IT procurement snapshot</h1>
-      <p>Run {html.escape(str(summary['run_id']))} · {html.escape(str(date_range['from']))} to {html.escape(str(date_range['to']))}</p>
+      <p>Run {html.escape(str(summary["run_id"]))}</p>
+      <p><strong>{html.escape(completeness)}</strong> · Quality checks: {quality}</p>
+      <p>Requested window: {html.escape(requested)} · Observed dates: {html.escape(observed)}</p>
     </header>
     <section class="cards">
-      <div class="card">Notices<strong>{totals['notices']}</strong></div>
-      <div class="card">Unique buyers<strong>{totals['unique_buyers']}</strong></div>
-      <div class="card">Unique CPV codes<strong>{totals['unique_cpv_codes']}</strong></div>
-      <div class="card">Notice types<strong>{totals['notice_types']}</strong></div>
+      <div class="card">Notices<strong>{totals["notices"]}</strong></div>
+      <div class="card">Distinct buyer names<strong>{totals["unique_buyers"]}</strong></div>
+      <div class="card">Unique CPV codes<strong>{totals["unique_cpv_codes"]}</strong></div>
+      <div class="card">Notice types<strong>{totals["notice_types"]}</strong></div>
     </section>
     <div class="grid">{tables}</div>
-    <footer>Generated from quality-gated Silver Parquet data. Counts are scoped to this run.</footer>
+    <footer>Counts are scoped to this run. Buyer names are not verified organization identities; spelling and language variants may represent the same buyer.</footer>
   </main>
 </body>
 </html>
@@ -274,21 +253,42 @@ def render_report(summary: dict[str, object]) -> str:
 def write_gold(
     silver_dir: Path,
     target_dir: Path | None = None,
+    *,
+    manifest: dict | None = None,
+    quality_verified: bool = False,
 ) -> dict[str, object]:
     target = target_dir or Path("data/gold") / silver_dir.name
     target.mkdir(parents=True, exist_ok=True)
-
     models = build_gold(
         pl.read_parquet(silver_dir / "notice.parquet"),
         pl.read_parquet(silver_dir / "notice_buyer.parquet"),
         pl.read_parquet(silver_dir / "notice_cpv.parquet"),
     )
-
     for name, frame in models.items():
         frame.write_parquet(target / f"{name}.parquet")
-
     daily_rows = _json_rows(models["daily_summary"])
+    manifest = manifest or {}
+    query = manifest.get("query", "")
+
+    def date_bound(operator: str) -> str | None:
+        match = re.search(r"publication-date" + operator + r"(\d{8})(?!\d)", query)
+        if match is None:
+            return None
+        value = match.group(1)
+        return date.fromisoformat(value).isoformat()
+
     summary = {
+        "schema_version": 1,
+        "quality_verified": quality_verified,
+        "extraction": {
+            "status": manifest.get("status", "unknown"),
+            "query": query or None,
+            "requested_window": {"from": date_bound(">="), "to": date_bound("<=")},
+        },
+        "metric_definitions": {
+            "unique_buyers": "Distinct buyer_name strings, not resolved organizations",
+            "notices": "Publication records in this run, not distinct procurement procedures",
+        },
         "run_id": silver_dir.name,
         "date_range": {
             "from": daily_rows[0]["publication_date"] if daily_rows else None,
@@ -305,7 +305,6 @@ def write_gold(
         "notice_types": _json_rows(models["notice_type_summary"]),
         "daily": daily_rows,
     }
-
     (target / "summary.json").write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
         encoding="utf-8",
@@ -314,9 +313,7 @@ def write_gold(
         render_report(summary),
         encoding="utf-8",
     )
-
     return {
         **summary["totals"],
         "files": len(models) + 2,
     }
-

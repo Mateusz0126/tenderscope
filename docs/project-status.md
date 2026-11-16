@@ -4,7 +4,7 @@ Last verified: **2026-11-15**
 
 ## Executive assessment
 
-TenderScope processes bounded TED date windows in Azure dev. The workflow uses retries and resumable ingestion, blocking quality checks, three analytical layers, and approval-gated OIDC with scoped identities. Operators choose which window to run. Proactive monitoring, retention policies, and a policy for schema changes remain open.
+TenderScope processes bounded TED date windows in Azure dev. The workflow uses retries and resumable ingestion, blocking quality checks, three analytical layers, and approval-gated OIDC with scoped identities. Operators choose which window to run. Proactive monitoring, retention policies, and automatic historical reconciliation remain open.
 
 ## What works now
 
@@ -38,7 +38,7 @@ TenderScope processes bounded TED date windows in Azure dev. The workflow uses r
 | Priority | Gap | Why it matters | Sensible next step |
 | --- | --- | --- | --- |
 | P1 | No proactive operational alert | A failed manual run is visible in GitHub but does not notify an operator outside GitHub | Add a low-cost failure notification and Azure alert |
-| P1 | No schema evolution policy | Upstream TED field changes are detected indirectly by tests and transformations | Version Bronze/Silver contracts and add schema compatibility tests |
+| P2 | No automatic historical reconciliation | The watermark does not revisit corrected historical data | Follow the reviewed correction procedure; add a replacement catalog before cross-run analytics |
 | P2 | No storage lifecycle policy | Old raw pages and reports accumulate indefinitely | Add reviewed retention tiers for dev data |
 | P2 | No automated backfill orchestration | Windows are bounded and manually selected | Add a controlled backfill command with idempotent state |
 | P2 | Report is not hosted | The HTML artifact must be downloaded or opened from storage | Keep it static or publish to a deliberately chosen low-cost host |
@@ -54,4 +54,10 @@ TenderScope processes bounded TED date windows in Azure dev. The workflow uses r
 
 ## Recommended next milestone
 
-The highest-value next milestone is **operational telemetry plus failure notification**, followed by explicit source/Silver schema compatibility checks. These additions build on the durable state protocol without changing the cost-controlled, manually approved execution model.
+The highest-value next milestone is **operational telemetry plus failure notification**, followed by a reviewed historical replacement catalog. These additions build on the durable state protocol without changing the cost-controlled, manually approved execution model.
+
+## Reliability hardening
+
+The publication protocol now rejects reuse of completed or reserved run IDs, including legacy successes. Regression tests cover a failed second publication and actual SDK conditional headers. Report metadata separates completeness from quality and preserves empty requested windows. Source compatibility and exact Silver schema checks are enforced; see [data contracts](data-contracts.md).
+
+The ETL workflow offers a bounded page limit and an always-run diagnostic summary. These changes require a new application deployment and supervised integration run before they can be described as verified in Azure. Proactive alerts, automated retention and a cross-run replacement catalog remain open.

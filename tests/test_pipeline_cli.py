@@ -26,9 +26,7 @@ def test_explicit_window_builds_deterministic_run_plan():
         "4",
     )
 
-    assert plan.run_dir == Path(
-        "data/raw/ted_20261114T220000000000Z"
-    )
+    assert plan.run_dir == Path("data/raw/ted_20261114T220000000000Z")
     assert "publication-date>=20261112" in plan.query
     assert "publication-date<=20261113" in plan.query
     assert plan.max_pages == 4

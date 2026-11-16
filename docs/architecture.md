@@ -29,22 +29,22 @@ flowchart LR
 ## Pipeline lifecycle
 
 1. The user chooses a completed historical date window in `Run ETL dev`.
-2. GitHub validates that the inclusive window is no longer than seven days.
-3. The protected `dev` environment pauses the job until the repository owner approves it.
+2. The protected `dev` environment pauses the job until the repository owner approves it.
+3. GitHub validates the date window (at most seven days) and page limit (1–100).
 4. GitHub exchanges its OIDC token for a short-lived Azure token. No Azure client secret is stored.
 5. The runner identity starts one Container Apps Job execution with the selected dates.
 6. The job fetches TED pages and writes an atomic Bronze manifest.
 7. Polars creates normalized Silver datasets.
 8. DuckDB runs eight quality checks. Any failure stops publication.
 9. Polars creates Gold summaries and a self-contained HTML report.
-10. The runtime identity uploads all layers and writes Silver `_SUCCESS.json`.
+10. The runtime identity reserves the run ID, uploads all layers and writes Silver `_SUCCESS.json`.
 11. The job conditionally advances the versioned Control watermark using the ETag read at startup.
 
 ## Data contracts
 
 | Layer | Files | Contract |
 | --- | --- | --- |
-| Bronze | `manifest.json`, `page_*.json` | Immutable API evidence, query, pagination state, timestamps and page counts |
+| Bronze | `manifest.json`, `page_*.json` | Raw API evidence, versioned manifest, query, pagination state, timestamps and page counts |
 | Silver | `notice.parquet`, `notice_buyer.parquet`, `notice_cpv.parquet` | Typed analytical tables with uniqueness and referential checks |
 | Gold | four summary Parquet files, `summary.json`, `report.html` | Run-level KPIs for dates, buyers, CPV codes and notice types |
 | Completion | `silver/.../_SUCCESS.json` | Written only after Bronze, Silver and Gold uploads complete |
@@ -82,4 +82,6 @@ GitHub federation is restricted to the repository's protected `dev` environment.
 - The dev job uses 0.5 vCPU, 1 GiB memory and a 30-minute execution timeout.
 - ACR uses Basic, Storage uses Standard LRS and Log Analytics retains 30 days.
 
-These decisions are appropriate for a portfolio environment. A production service would additionally need proactive alerting, retention policies, schema evolution rules, service objectives and an approved manual state-repair procedure.
+These decisions are appropriate for a portfolio environment. A production service would additionally need proactive alerting, retention policies, service objectives and an approved manual state-repair procedure.
+
+See [data contracts](data-contracts.md) for compatibility, metric definitions and historical correction limitations.

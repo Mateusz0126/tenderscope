@@ -1,8 +1,10 @@
-
 import json
 from pathlib import Path
 
 import duckdb
+import polars as pl
+
+from tenderscope.transformations.silver import BUYER_SCHEMA, CPV_SCHEMA, NOTICE_SCHEMA
 
 
 def validate_silver(
@@ -13,27 +15,30 @@ def validate_silver(
     """Validate Silver data against the Bronze manifest."""
 
     manifest_path = run_dir / "manifest.json"
-    manifest = json.loads(
-        manifest_path.read_text(encoding="utf-8")
-    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
 
     if manifest["status"] != "completed" and not allow_partial:
         raise RuntimeError("Bronze run is not completed")
 
-    expected = sum(
-        page["record_count"]
-        for page in manifest["pages"]
-    )
+    expected = sum(page["record_count"] for page in manifest["pages"])
 
     silver_dir = Path("data/silver") / run_dir.name
+
+    for table, schema in (
+        ("notice", NOTICE_SCHEMA),
+        ("notice_cpv", CPV_SCHEMA),
+        ("notice_buyer", BUYER_SCHEMA),
+    ):
+        actual = dict(pl.read_parquet_schema(silver_dir / f"{table}.parquet"))
+        if actual != schema:
+            raise ValueError(f"Silver schema v1 mismatch for {table}: {actual}")
 
     with duckdb.connect(":memory:") as con:
         for table in ("notice", "notice_cpv", "notice_buyer"):
             path = silver_dir / f"{table}.parquet"
             con.read_parquet(str(path)).create_view(table)
 
-        total, unique_ids, invalid_ids, missing_dates = (
-            con.execute("""
+        total, unique_ids, invalid_ids, missing_dates = con.execute("""
                 SELECT
                     COUNT(*),
                     COUNT(DISTINCT notice_id),
@@ -46,7 +51,6 @@ def validate_silver(
                     )
                 FROM notice
             """).fetchone()
-        )
 
         checks = {
             "Bronze/Silver count": total == expected,
@@ -85,15 +89,10 @@ def validate_silver(
     for name, passed in checks.items():
         print(f"{'PASS' if passed else 'FAIL'}: {name}")
 
-    failed = [
-        name for name, passed in checks.items()
-        if not passed
-    ]
+    failed = [name for name, passed in checks.items() if not passed]
 
     if failed:
-        raise RuntimeError(
-            f"Silver validation failed: {', '.join(failed)}"
-        )
+        raise RuntimeError(f"Silver validation failed: {', '.join(failed)}")
 
     return {
         "bronze_records": expected,

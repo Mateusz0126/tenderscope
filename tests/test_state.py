@@ -111,9 +111,13 @@ def test_state_json_round_trip_is_versioned_and_utc():
 
 
 def test_state_rejects_unknown_schema_version():
-    content = make_state(date(2026, 11, 11)).to_json().replace(
-        b'"schema_version": 1',
-        b'"schema_version": 2',
+    content = (
+        make_state(date(2026, 11, 11))
+        .to_json()
+        .replace(
+            b'"schema_version": 1',
+            b'"schema_version": 2',
+        )
     )
 
     with pytest.raises(ValueError, match="invalid field values"):

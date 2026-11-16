@@ -1,4 +1,3 @@
-
 import json
 from pathlib import Path
 
@@ -17,16 +16,12 @@ def main() -> None:
 
     print("\n=== FIELD PROFILING ===")
 
-    all_fields = sorted(
-        {key for notice in notices for key in notice}
-    )
+    all_fields = sorted({key for notice in notices for key in notice})
 
     for field in all_fields:
         values = [notice.get(field) for notice in notices]
 
-        types = sorted(
-            {type(value).__name__ for value in values if value is not None}
-        )
+        types = sorted({type(value).__name__ for value in values if value is not None})
 
         missing = sum(value is None for value in values)
 
@@ -46,7 +41,6 @@ def main() -> None:
         print(f"  Types: {types}")
         print(f"  Missing: {missing}/{len(notices)}")
         print(f"  Sample: {preview}")
-
 
         print("\n=== NESTED STRUCTURES ===")
 

@@ -143,9 +143,7 @@ def test_first_commit_creates_versioned_state():
         now=lambda: datetime(2026, 11, 14, 20, 0, tzinfo=UTC),
     )
 
-    stored = PipelineState.from_json(
-        service.control.files["state/ted-poland-it.json"]
-    )
+    stored = PipelineState.from_json(service.control.files["state/ted-poland-it.json"])
     assert stored.last_completed_date == date(2026, 11, 11)
     assert stored.last_run_id == "ted_current"
     assert result["etag_precondition"] is False

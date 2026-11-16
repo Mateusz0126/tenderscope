@@ -1,4 +1,3 @@
-
 import json
 
 import httpx
@@ -69,11 +68,7 @@ def test_resume_from_saved_checkpoint(tmp_path):
             max_pages=2,
         )
 
-    manifest = json.loads(
-        (run_dir / "manifest.json").read_text(
-            encoding="utf-8"
-        )
-    )
+    manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
 
     assert received_tokens == [None, "token-2"]
     assert len(manifest["pages"]) == 2
