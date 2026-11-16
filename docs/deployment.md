@@ -82,7 +82,7 @@ Open **Actions → Run ETL dev → Run workflow** on `main`, then enter `since` 
 - a maximum execution wait of 30 minutes.
 - a durable watermark that rejects gaps, overlaps and stale concurrent writers.
 
-Choose the dates deliberately before each run. The first state-enforced run bootstraps the stream; every later run must start on the exact next date reported by the watermark. Keep `--allow-partial` disabled so a page-limited subset cannot advance durable state.
+Choose the mode and dates deliberately before each run. `incremental` is the default; `backfill` writes separately without changing state (see [backfill](backfill.md)). The first state-enforced run bootstraps the stream; every later run must start on the exact next date reported by the watermark. Keep `--allow-partial` disabled so a page-limited subset cannot advance durable state.
 
 For a new environment, deploy the reviewed Bicep configuration with the `control` container and its scoped runtime role before the first state-enforced execution. For an existing stream, read `last_completed_date` from `control/state/ted-poland-it.json` and set `since` to the next calendar day. Check the execution and matching completion marker using [Durable incremental state and recovery](state-and-recovery.md).
 
@@ -94,3 +94,5 @@ For a new environment, deploy the reviewed Bicep configuration with the `control
 The final workflow summary reports the requested dates, page limit, image digest, Azure execution, observed status and failed workflow stages, including failures before ETL starts. A polling timeout does not cancel Azure execution. Check the execution logs and watermark before retrying. The summary is diagnostic output, not proactive notification; no new alert resources are provisioned.
 
 Publication IDs are single-use. After a cloud upload failure, retry the same date window as a new run. Existing reports keep their old format until a new batch is generated with the updated image.
+
+For earlier dates, use the supervised [backfill procedure](backfill.md). The same environment approval, page/date bounds and fixed execution limits apply.

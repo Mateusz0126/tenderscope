@@ -1,10 +1,18 @@
 name: Run ETL dev
 
-run-name: Run ETL dev ${{ inputs.since }} to ${{ inputs.until }}
+run-name: Run ETL dev ${{ inputs.mode || 'incremental' }} ${{ inputs.since }} to ${{ inputs.until }}
 
 on:
   workflow_dispatch:
     inputs:
+      mode:
+        description: Incremental advances the watermark; backfill writes a separate historical batch
+        required: true
+        type: choice
+        default: incremental
+        options:
+          - incremental
+          - backfill
       since:
         description: First publication date (YYYY-MM-DD)
         required: true
@@ -47,11 +55,17 @@ jobs:
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
           MAX_PAGES: ${{ inputs.max_pages }}
+          MODE: ${{ inputs.mode || 'incremental' }}
         run: |
           set -euo pipefail
           python - <<'PY'
           import os
           from datetime import UTC, date, datetime
+
+          mode = os.environ["MODE"]
+          if mode not in ("incremental", "backfill"):
+              raise SystemExit("Mode must be incremental or backfill.")
+          print(f"Mode: {mode}; watermark: {'enforced' if mode == 'incremental' else 'unchanged'}")
 
           since_text = os.environ["SINCE"]
           until_text = os.environ["UNTIL"]
@@ -127,6 +141,7 @@ jobs:
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
           MAX_PAGES: ${{ inputs.max_pages }}
+          MODE: ${{ inputs.mode || 'incremental' }}
         run: |
           set -euo pipefail
           az containerapp job show \
@@ -135,31 +150,34 @@ jobs:
             --query properties.template \
             --output json > current-template.json
 
-          container_count="$(jq '.containers | length' current-template.json)"
-          if [[ "${container_count}" != "1" ]]; then
-            echo "Expected exactly one job container; found ${container_count}." >&2
-            exit 1
-          fi
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
 
-          image="$(jq -r '.containers[0].image' current-template.json)"
-          if [[ ! "${image}" =~ @sha256:[0-9a-f]{64}$ ]]; then
-            echo "The job image must be pinned to an immutable SHA-256 digest." >&2
-            exit 1
-          fi
-
-          echo "image=${image}" >> "${GITHUB_OUTPUT}"
-
-          jq \
-            --arg since "${SINCE}" \
-            --arg until "${UNTIL}" \
-            --arg max_pages "${MAX_PAGES}" \
-            '.containers[0].args = [
-              "--since", $since,
-              "--until", $until,
-              "--max-pages", $max_pages,
-              "--state-policy", "enforce"
-            ]' \
-            current-template.json > execution-template.yaml
+          template = json.loads(Path("current-template.json").read_text())
+          containers = template.get("containers", [])
+          if len(containers) != 1:
+              raise SystemExit("Expected exactly one job container.")
+          image = containers[0].get("image", "")
+          if not re.fullmatch(r".+@sha256:[0-9a-f]{64}", image):
+              raise SystemExit("The job image must be pinned to an immutable SHA-256 digest.")
+          mode = os.environ["MODE"]
+          if mode not in ("incremental", "backfill"):
+              raise SystemExit("Unknown ETL mode.")
+          since, until = os.environ["SINCE"], os.environ["UNTIL"]
+          prefix = "runs" if mode == "incremental" else f"backfills/{since}_{until}"
+          policy = "enforce" if mode == "incremental" else "off"
+          containers[0]["args"] = [
+              "--since", since, "--until", until,
+              "--max-pages", os.environ["MAX_PAGES"],
+              "--state-policy", policy, "--storage-prefix", prefix,
+          ]
+          Path("execution-template.yaml").write_text(json.dumps(template), encoding="utf-8")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as output:
+              output.write(f"image={image}\nprefix={prefix}\nstate_policy={policy}\n")
+          PY
 
       - name: Start ETL execution
         id: execution
@@ -196,6 +214,7 @@ jobs:
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
           MAX_PAGES: ${{ inputs.max_pages }}
+          MODE: ${{ inputs.mode || 'incremental' }}
         run: |
           set -euo pipefail
           deadline=$((SECONDS + 1800))
@@ -244,6 +263,7 @@ jobs:
           SINCE: ${{ inputs.since }}
           UNTIL: ${{ inputs.until }}
           MAX_PAGES: ${{ inputs.max_pages }}
+          MODE: ${{ inputs.mode || 'incremental' }}
         run: |
           python - <<'PY'
           import html
@@ -257,7 +277,10 @@ jobs:
           result = steps.get("wait", {}).get("outputs", {})
           rows = {
               "Requested dates": f"{os.environ['SINCE']} through {os.environ['UNTIL']}",
+              "Mode": os.environ["MODE"],
               "Page limit": os.environ["MAX_PAGES"],
+              "Storage prefix": steps.get("template", {}).get("outputs", {}).get("prefix", "Not resolved"),
+              "State policy": steps.get("template", {}).get("outputs", {}).get("state_policy", "Not resolved"),
               "Azure execution": execution,
               "Azure status": result.get("status", "Not observed"),
               "Last observed status": result.get("last_status", "Not observed"),
@@ -268,6 +291,10 @@ jobs:
               output.write("### TenderScope ETL dev\n\n")
               for label, value in rows.items():
                   output.write(f"<p><strong>{label}:</strong> {html.escape(value)}</p>\n")
+              if os.environ["MODE"] == "backfill":
+                  output.write("\nBackfill leaves the incremental watermark unchanged. "
+                               "A successful batch is not automatically accepted into history; "
+                               "review its run ID and update the catalog in a separate PR.\n")
               if failed or result.get("status") != "Succeeded":
                   output.write("\nInspect the failed step and Container Apps execution logs before retrying. "
                                "A polling timeout does not stop the Azure execution. "
